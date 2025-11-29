@@ -19,7 +19,7 @@ TELEGRAM_BOT_TOKEN = ""
 PIXABAY_API_KEY = ""
 
 # Посилання на вашу гру (Web App)
-WEB_APP_URL = ""
+WEB_APP_URL = "https://den611.github.io/konrkursMAN/index.html"
 
 # Додайте сюди всі ваші API ключі. Якщо один закінчиться, бот візьме наступний.
 GEMINI_API_KEYS = [
