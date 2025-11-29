@@ -15,11 +15,11 @@ from cachetools import TTLCache
 from typing import Any, Awaitable, Callable, Dict
 import aiohttp
 
-TELEGRAM_BOT_TOKEN = "8580426946:AAGLsxImSa-oayIVtahgW6gqAUM5hiZeC-Y"
-PIXABAY_API_KEY = "40354654-9c5d6385ec875659ddfb3386d"
+TELEGRAM_BOT_TOKEN = ""
+PIXABAY_API_KEY = ""
 
 # Посилання на вашу гру (Web App)
-WEB_APP_URL = "https://den611.github.io/konrkurs/"
+WEB_APP_URL = ""
 
 # Додайте сюди всі ваші API ключі. Якщо один закінчиться, бот візьме наступний.
 GEMINI_API_KEYS = [
