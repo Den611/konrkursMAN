@@ -335,7 +335,7 @@ def get_main_kb(user_id):
         words_raw.sort(key=lambda x: x[3])
 
         # Беремо перші 50 слів
-        sample = words_raw[:50]
+        sample = words_raw[:10]
 
         for w in sample:
             game_words.append({"w": w[0], "t": w[1]})
