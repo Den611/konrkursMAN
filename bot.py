@@ -23,10 +23,7 @@ WEB_APP_URL = "https://den611.github.io/konrkurs/"
 
 # Додайте сюди всі ваші API ключі. Якщо один закінчиться, бот візьме наступний.
 GEMINI_API_KEYS = [
-    "AIzaSyAvtAaGPfAW8KKjeMFS2wyG2phKW5txVuI",
-    "AIzaSyDx-h-Jz2qj_sqDko2LDLFMAQT4mC7cvzA",
-    "AIzaSyAnSSocuW5nkCK9qF_Werw7Yf0o4U2zaZE",
-    "AIzaSyCnKdD64fwuqIfwKPtrwg-X4EZaeCaRcZ0"
+    ""
 ]
 
 # Ініціалізація бота та диспетчера
