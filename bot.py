@@ -19,13 +19,14 @@ TELEGRAM_BOT_TOKEN = ""
 PIXABAY_API_KEY = ""
 
 # Посилання на вашу гру (Web App)
-WEB_APP_URL = "https://den611.github.io/konrkursMAN/index.html"
+WEB_APP_URL = ""
 
 # Додайте сюди всі ваші API ключі. Якщо один закінчиться, бот візьме наступний.
 GEMINI_API_KEYS = [
-    ""
+    "",
+    "",
+    "",
 ]
-
 # Ініціалізація бота та диспетчера
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
@@ -46,7 +47,7 @@ CREATE TABLE IF NOT EXISTS users (
 """)
 
 # Створення таблиці слів користувачів, якщо вона не існує
-# Оновлено: додано поля для картинки, асоціації та транскрипції
+# Оновлено: додані поля для картинки, асоціації та транскрипції
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS user_words (
     user_id INTEGER,
@@ -91,7 +92,6 @@ migrate_db()
 
 
 # --- МЕНЕДЖЕР API КЛЮЧІВ GEMINI ---
-
 class KeyManager:
     def __init__(self, keys):
         self.keys = keys
@@ -99,8 +99,8 @@ class KeyManager:
         self.client = self._init_client()
 
     def _init_client(self):
-        if not self.keys:
-            print("❌ Помилка: Список GEMINI_API_KEYS порожній!")
+        if not self.keys or not self.keys[0]:
+            print("❌ Помилка: Список GEMINI_API_KEYS порожній або містить пусті рядки!")
             return None
         print(f"🔄 Gemini: Використовую ключ №{self.current_index + 1}")
         return genai.Client(api_key=self.keys[self.current_index])
@@ -125,6 +125,8 @@ def generate_content_safe(contents, config=None, model="gemini-2.5-flash"):
     while attempts < max_attempts:
         try:
             client = key_manager.get_client()
+            if not client: raise Exception("API ключі не налаштовані")
+
             response = client.models.generate_content(
                 model=model,
                 config=config,
@@ -133,7 +135,7 @@ def generate_content_safe(contents, config=None, model="gemini-2.5-flash"):
             return response
         except Exception as e:
             error_msg = str(e).lower()
-            if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg or "403" in error_msg:
+            if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg:
                 print(f"⚠️ Gemini Error ({e}). Пробую наступний ключ...")
                 key_manager.rotate_key()
                 attempts += 1
@@ -311,7 +313,7 @@ def update_last_active(user_id):
         )
         conn.commit()
     except sqlite3.Error as e:
-        print(f"Database error in update_last_active: {e}")
+        print(f"Database error: {e}")
 
 
 # Видалення слова з бази даних
@@ -335,9 +337,10 @@ def get_main_kb(user_id):
         words_raw.sort(key=lambda x: x[3])
 
         # Беремо перші 50 слів
-        sample = words_raw[:10]
+        sample = words_raw[:50]
 
         for w in sample:
+            # w[0] - слово, w[1] - переклад
             game_words.append({"w": w[0], "t": w[1]})
 
     # Кодуємо в JSON для URL
@@ -554,8 +557,18 @@ async def cmd_add_word(message: types.Message, state: FSMContext):
 # Обробка введеного слова для додавання
 @dp.message(AddWord.waiting_for_word)
 async def process_word(message: types.Message, state: FSMContext):
-    if message.text.startswith("/"): await cmd_exit(message, state); return
-    await state.update_data(word=message.text)
+    update_last_active(message.from_user.id)
+    text = message.text.strip()
+
+    if text.lower() == '/exit':
+        await cmd_exit(message, state)
+        return
+    if text.startswith("/"):
+        await message.answer("❌ Будь ласка, спочатку завершіть додавання слова або натисніть /exit.")
+        return
+
+    word = text
+    await state.update_data(word=word)
 
     keyboard = [[types.KeyboardButton(text=l)] for l in SUPPORTED_LANGUAGES]
     keyboard.append([types.KeyboardButton(text="/exit")])
@@ -568,12 +581,20 @@ async def process_word(message: types.Message, state: FSMContext):
 # Обробка вибору мови та збереження слова
 @dp.message(AddWord.waiting_for_language)
 async def process_language(message: types.Message, state: FSMContext):
-    if message.text not in SUPPORTED_LANGUAGES:
+    update_last_active(message.from_user.id)
+    language = message.text.strip()
+
+    if language.lower() == '/exit':
         await cmd_exit(message, state)
         return
 
-    await state.update_data(language=message.text)
+    if language not in SUPPORTED_LANGUAGES:
+        await message.answer("❌ Невідома мова. Виберіть зі списку або /exit.")
+        return
+
+    await state.update_data(language=language)
     data = await state.get_data()
+    word = data.get("word")
 
     try:
         translator = GoogleTranslator(source='auto', target="uk")
@@ -600,7 +621,13 @@ async def process_language(message: types.Message, state: FSMContext):
 # 2. Зберігаємо фінальний варіант переклада
 @dp.message(AddWord.waiting_for_translation)
 async def process_custom_translation(message: types.Message, state: FSMContext):
-    if message.text.startswith("/"): await cmd_exit(message, state); return
+    update_last_active(message.from_user.id)
+    user_input = message.text.strip()
+    user_id = message.from_user.id
+
+    if user_input.lower() == '/exit':
+        await cmd_exit(message, state)
+        return
 
     data = await state.get_data()
     word = data.get("word")
@@ -611,9 +638,10 @@ async def process_custom_translation(message: types.Message, state: FSMContext):
     await message.answer("⏳ Зберігаю, шукаю картинку та генерую асоціацію...")
 
     # Паралельний запуск: Картинка + Інфо
+    # Спочатку отримуємо промпт для картинки від ШІ
     transcription, association, visual_prompt = await get_full_word_info(word, final_translation, language)
 
-    # Використовуємо visual_prompt для пошуку картинки
+    # Використовуємо цей промпт для пошуку картинки без тексту
     search_query = visual_prompt if visual_prompt else word
     image_url = await get_image_url(search_query)
 
@@ -624,20 +652,22 @@ async def process_custom_translation(message: types.Message, state: FSMContext):
                            transcription)
 
     kb = get_main_kb(message.from_user.id)
-
-    text = f"✅ Додано: {word} {transcription} — {final_translation}"
-    if association:
-        text += f"\n🧠 Асоціація: {association}"
-
-    # Кнопка регенерації
-    inline_kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🔄 Інше фото", callback_data="regen:add")]
-    ])
-
-    if image_url:
-        await message.answer_photo(photo=image_url, caption=text, reply_markup=inline_kb)
+    if not added:
+        await message.answer(f"⚠️ Слово '{word}' вже є у вашому словнику.", reply_markup=kb)
     else:
-        await message.answer(text, reply_markup=inline_kb)
+        text = f"✅ Додано: {word} {transcription} — {final_translation}"
+        if association:
+            text += f"\n🧠 Асоціація: {association}"
+
+        # Кнопка регенерації
+        inline_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔄 Інше фото", callback_data="regen:add")]
+        ])
+
+        if image_url:
+            await message.answer_photo(photo=image_url, caption=text, reply_markup=inline_kb)
+        else:
+            await message.answer(text, reply_markup=inline_kb)
 
     await message.answer("👇 Продовжити:", reply_markup=kb)
 
@@ -658,7 +688,15 @@ async def cmd_word_of_day(message: types.Message, state: FSMContext):
 @dp.message(WordOfDayState.waiting_for_language)
 async def process_word_of_day_lang(message: types.Message, state: FSMContext):
     lang = message.text.strip()
-    if lang not in SUPPORTED_LANGUAGES: await cmd_exit(message, state); return
+    user_id = message.from_user.id
+
+    if lang.lower() == '/exit':
+        await cmd_exit(message, state)
+        return
+
+    if lang not in SUPPORTED_LANGUAGES:
+        await message.answer("❌ Невідома мова. Виберіть зі списку.")
+        return
 
     await message.answer(f"⏳ Генерую слово ({lang})...")
 
@@ -839,14 +877,20 @@ async def cmd_practice(message: types.Message, state: FSMContext):
 # Вибір мови для практики та генерація списку слів
 @dp.message(PracticeWord.waiting_for_language)
 async def practice_choose_lang(message: types.Message, state: FSMContext):
-    if message.text == "/exit": await cmd_exit(message, state); return
+    update_last_active(message.from_user.id)
+    text = message.text.strip()
+
+    if text.lower() == '/exit':
+        await cmd_exit(message, state)
+        return
+
     data = await state.get_data()
     all_words = data.get("all_practice_words", [])
 
-    if message.text == "Усі мови":
+    if text == "Усі мови":
         target = all_words
     else:
-        target = [w for w in all_words if w[2] == message.text]
+        target = [w for w in all_words if w[2] == text]
 
     if not target: await message.answer("Пусто."); return
 
@@ -997,6 +1041,10 @@ async def process_ai_prompt(message: types.Message, state: FSMContext):
         await cmd_exit(message, state)
         return
 
+    if text.startswith("/"):
+        await message.answer("❌ Будь ласка, спочатку введіть запит для ШІ або натисніть /exit.")
+        return
+
     await state.update_data(prompt=text)
 
     languages_list = SUPPORTED_LANGUAGES + ["Українська"]
@@ -1055,7 +1103,7 @@ async def unknown_command(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state is not None:
         await message.answer(
-            "❌ Незрозуміла відповідь.", reply_markup=get_main_kb(message.from_user.id))
+            "❌ Незрозуміла відповідь. Будь ласка, дотримуйтесь інструкцій або натисніть /exit, щоб вийти з поточного режиму.")
         return
 
     await message.answer("❌ Невідома команда.\n" + COMMANDS_TEXT, reply_markup=get_main_kb(message.from_user.id))
