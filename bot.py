@@ -14,19 +14,58 @@ from google.genai import types as genai_types
 from cachetools import TTLCache
 from typing import Any, Awaitable, Callable, Dict
 import aiohttp
+#------
+from dotenv import load_dotenv
+from typing import Dict, Any
 
-TELEGRAM_BOT_TOKEN = ""
-PIXABAY_API_KEY = ""
+def load_config_from_env(env_file: str = ".env") -> Dict[str, Any]:
+    """
+    Завантажує конфігураційні змінні (токени, ключі, URL) 
+    з .env файлу та повертає їх у вигляді словника.
 
-# Посилання на вашу гру (Web App)
-WEB_APP_URL = ""
+    :param env_file: Ім'я файлу оточення (за замовчуванням .env).
+    :return: Словник з конфігураційними даними.
+    """
+    # 1. Завантажуємо змінні оточення. Це робить їх доступними через os.getenv()
+    load_dotenv(dotenv_path=env_file)
 
-# Додайте сюди всі ваші API ключі. Якщо один закінчиться, бот візьме наступний.
-GEMINI_API_KEYS = [
-    "",
-    "",
-    "",
-]
+    config = {}
+
+    # 2. Зчитуємо прості змінні
+    config["TELEGRAM_BOT_TOKEN"] = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    config["PIXABAY_API_KEY"] = os.getenv("PIXABAY_API_KEY", "")
+    config["WEB_APP_URL"] = os.getenv("WEB_APP_URL", "")
+
+    # 3. Обробка списку ключів GEMINI_API_KEYS
+    gemini_keys_str = os.getenv("GEMINI_API_KEYS")
+    
+    if gemini_keys_str:
+        # Розділяємо рядок за комою, видаляємо зайві пробіли 
+        # та відфільтровуємо порожні значення.
+        config["GEMINI_API_KEYS"] = [key.strip() 
+                                     for key in gemini_keys_str.split(',') 
+                                     if key.strip()]
+    else:
+        config["GEMINI_API_KEYS"] = []
+
+    return config
+
+# --- Використання функції ---
+config = load_config_from_env()
+
+# Заповнення ваших початкових змінних даними зі словника
+TELEGRAM_BOT_TOKEN = config["TELEGRAM_BOT_TOKEN"]
+PIXABAY_API_KEY = config["PIXABAY_API_KEY"]
+WEB_APP_URL = config["WEB_APP_URL"]
+GEMINI_API_KEYS = config["GEMINI_API_KEYS"]
+
+# Перевірка завантажених даних
+print("✅ Конфігурація успішно завантажена:")
+print(f"TELEGRAM_BOT_TOKEN: {TELEGRAM_BOT_TOKEN[:8]}...") 
+print(f"WEB_APP_URL: {WEB_APP_URL}")
+print(f"Кількість завантажених Gemini ключів: {len(GEMINI_API_KEYS)}")
+print(f"Перший ключ Gemini: {GEMINI_API_KEYS[0][:8]}..." if GEMINI_API_KEYS else "Ключі Gemini відсутні.")
+
 # Ініціалізація бота та диспетчера
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
