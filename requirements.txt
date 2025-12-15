@@ -3,3 +3,4 @@ deep-translator==1.11.1
 google-genai
 cachetools
 aiohttp
+python-dotenv
