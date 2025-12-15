@@ -14,6 +14,7 @@ from google.genai import types as genai_types
 from cachetools import TTLCache
 from typing import Any, Awaitable, Callable, Dict
 import aiohttp
+import os
 #------
 from dotenv import load_dotenv
 from typing import Dict, Any
