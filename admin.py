@@ -71,7 +71,7 @@ class AdminApp(tk.Tk):
 
         self.stats_tree.pack(fill=tk.X, padx=5, pady=5)
 
-        # --- 4. СЛОВНИК ---
+        # СЛОВНИК
         frame_words = tk.LabelFrame(self, text="Словник користувача")
         frame_words.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
