@@ -20,13 +20,8 @@ from dotenv import load_dotenv
 from typing import Dict, Any
 
 def load_config_from_env(env_file: str = ".env") -> Dict[str, Any]:
-    """
-    Завантажує конфігураційні змінні (токени, ключі, URL) 
-    з .env файлу та повертає їх у вигляді словника.
+    #Завантажує конфігураційні змінні (токени, ключі, URL) з .env файлу та повертає їх у вигляді словника.
 
-    :param env_file: Ім'я файлу оточення (за замовчуванням .env).
-    :return: Словник з конфігураційними даними.
-    """
     # 1. Завантажуємо змінні оточення. Це робить їх доступними через os.getenv()
     load_dotenv(dotenv_path=env_file)
 
@@ -51,7 +46,7 @@ def load_config_from_env(env_file: str = ".env") -> Dict[str, Any]:
 
     return config
 
-# --- Використання функції ---
+#Використання функції
 config = load_config_from_env()
 
 # Заповнення ваших початкових змінних даними зі словника
@@ -104,7 +99,6 @@ CREATE TABLE IF NOT EXISTS user_words (
 conn.commit()
 
 
-# --- МІГРАЦІЯ БАЗИ ДАНИХ ---
 # Функція для автоматичного додавання нових колонок у старі бази даних
 def migrate_db():
     columns = [
@@ -131,7 +125,7 @@ def migrate_db():
 migrate_db()
 
 
-# --- МЕНЕДЖЕР API КЛЮЧІВ GEMINI ---
+# МЕНЕДЖЕР API КЛЮЧІВ GEMINI
 class KeyManager:
     def __init__(self, keys):
         self.keys = keys
@@ -184,7 +178,7 @@ def generate_content_safe(contents, config=None, model="gemini-2.5-flash"):
     raise Exception("❌ Всі API ключі вичерпано.")
 
 
-# --- ДОДАТКОВІ ФУНКЦІЇ (КАРТИНКИ ТА ІНФО) ---
+# ДОДАТКОВІ ФУНКЦІЇ (КАРТИНКИ ТА ІНФО)
 
 # Функція пошуку картинки на Pixabay (Оновлено: додано use_random)
 async def get_image_url(query, use_random=False):
@@ -212,7 +206,6 @@ async def get_image_url(query, use_random=False):
 
 
 # Функція отримання транскрипції та асоціації від ШІ
-# ОНОВЛЕНО: Тепер повертає також VISUAL_SEARCH_PROMPT для картинки без тексту
 async def get_full_word_info(word, translation, lang):
     prompt = (
         f"Analyze the word '{word}' (language: {lang}, translation: '{translation}'). "
@@ -264,7 +257,7 @@ async def get_ai_explanation_text(content, language_of_word):
     return response.text.replace("*", "")
 
 
-# --- ФУНКЦІЇ БАЗИ ДАНИХ (Оновлені) ---
+# ФУНКЦІЇ БАЗИ ДАНИХ
 
 def add_word_to_db(user_id, word, translation, language, image_url=None, association=None, transcription=None):
     try:
@@ -365,7 +358,7 @@ def delete_word_from_db(user_id, word):
         print(f"Database error in delete_word_from_db: {e}")
 
 
-# --- ДИНАМІЧНА КЛАВІАТУРА ---
+# ДИНАМІЧНА КЛАВІАТУРА
 # Генерує посилання на гру з 50 найменш вивченими словами
 def get_main_kb(user_id):
     words_raw = get_user_words(user_id)
@@ -480,7 +473,7 @@ COMMANDS_TEXT = (
 SUPPORTED_LANGUAGES = ["English", "German", "French", "Polish", "Spanish", "Italian"]
 
 
-# --- HANDLERS (ОБРОБНИКИ) ---
+# ОБРОБНИКИ
 
 # Обробник команди /start
 @dp.message(Command("start"))
