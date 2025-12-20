@@ -185,9 +185,9 @@ async def start_web_server():
 # Функція, яка робить щось кожні 40 секунд
 async def keep_alive_task():
     while True:
-        await asyncio.sleep(40)
+        await asyncio.sleep(10)
         try:
-            print("40 секунд пройшло, бот активний...")
+            print("10 секунд пройшло, бот активний...")
         except Exception as e:
             print(f"Error in keep_alive: {e}")
 
