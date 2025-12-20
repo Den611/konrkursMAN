@@ -3,7 +3,7 @@ import sqlite3
 import json
 import urllib.parse
 from datetime import datetime
-from aiogram import Bot, Dispatcher, types, BaseMiddleware, F
+from aiogram import Bot, Dispatcher, Router, types, BaseMiddleware, F
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -54,9 +54,9 @@ print(f"WEB_APP_URL: {WEB_APP_URL}")
 print(f"Кількість завантажених Gemini ключів: {len(GEMINI_API_KEYS)}")
 print(f"Перший ключ Gemini: {GEMINI_API_KEYS[0][:8]}..." if GEMINI_API_KEYS else "Ключі Gemini відсутні.")
 
-# Ініціалізація бота та диспетчера
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
-dp = Dispatcher()
+# --- ВИПРАВЛЕННЯ: Використовуємо Router замість глобального Dispatcher ---
+# Це необхідно для уникнення помилки "bound to a different event loop"
+router = Router()
 
 # Підключення до бази даних та створення курсору
 conn = sqlite3.connect("words.db")
@@ -477,10 +477,10 @@ COMMANDS_TEXT = (
 SUPPORTED_LANGUAGES = ["English", "German", "French", "Polish", "Spanish", "Italian"]
 
 
-# ОБРОБНИКИ
+# ОБРОБНИКИ (Всі @dp замінені на @router)
 
 # Обробник команди /start
-@dp.message(Command("start"))
+@router.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     add_user(message.from_user.id, message.from_user.username)
     update_last_active(message.from_user.id)
@@ -490,7 +490,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 
 # Обробник команди /exit
-@dp.message(Command("exit"))
+@router.message(Command("exit"))
 async def cmd_exit(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     current_state = await state.get_state()
@@ -505,7 +505,7 @@ async def cmd_exit(message: types.Message, state: FSMContext):
 
 
 # ОБРОБКА КНОПКИ РЕГЕНЕРАЦІЇ ФОТО
-@dp.callback_query(F.data.startswith("regen:"))
+@router.callback_query(F.data.startswith("regen:"))
 async def callback_regenerate(callback: types.CallbackQuery, state: FSMContext):
     # regen:mode (add/wod/ai)
     mode = callback.data.split(":")[1]
@@ -548,7 +548,7 @@ async def callback_regenerate(callback: types.CallbackQuery, state: FSMContext):
 
 
 # ОБРОБКА ДАНИХ З ГРИ (WEB APP)
-@dp.message(F.content_type == types.ContentType.WEB_APP_DATA)
+@router.message(F.content_type == types.ContentType.WEB_APP_DATA)
 async def process_web_app_data(message: types.Message):
     data = json.loads(message.web_app_data.data)
 
@@ -583,7 +583,7 @@ async def process_web_app_data(message: types.Message):
 
 
 # Початок процесу додавання слова
-@dp.message(Command("add_word"))
+@router.message(Command("add_word"))
 async def cmd_add_word(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     kb = get_main_kb(message.from_user.id)
@@ -592,7 +592,7 @@ async def cmd_add_word(message: types.Message, state: FSMContext):
 
 
 # Обробка введеного слова для додавання
-@dp.message(AddWord.waiting_for_word)
+@router.message(AddWord.waiting_for_word)
 async def process_word(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     text = message.text.strip()
@@ -616,7 +616,7 @@ async def process_word(message: types.Message, state: FSMContext):
 
 
 # Обробка вибору мови та збереження слова
-@dp.message(AddWord.waiting_for_language)
+@router.message(AddWord.waiting_for_language)
 async def process_language(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     language = message.text.strip()
@@ -656,7 +656,7 @@ async def process_language(message: types.Message, state: FSMContext):
 
 
 # 2. Зберігаємо фінальний варіант переклада
-@dp.message(AddWord.waiting_for_translation)
+@router.message(AddWord.waiting_for_translation)
 async def process_custom_translation(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     user_input = message.text.strip()
@@ -706,7 +706,7 @@ async def process_custom_translation(message: types.Message, state: FSMContext):
 
 
 # Слово дня з ШІ
-@dp.message(Command("word_of_day"))
+@router.message(Command("word_of_day"))
 async def cmd_word_of_day(message: types.Message, state: FSMContext):
     keyboard = [[types.KeyboardButton(text=l)] for l in SUPPORTED_LANGUAGES]
     keyboard.append([types.KeyboardButton(text="/exit")])
@@ -716,7 +716,7 @@ async def cmd_word_of_day(message: types.Message, state: FSMContext):
     await message.answer("🌟 Оберіть мову для нового слова:", reply_markup=lang_kb)
 
 
-@dp.message(WordOfDayState.waiting_for_language)
+@router.message(WordOfDayState.waiting_for_language)
 async def process_word_of_day_lang(message: types.Message, state: FSMContext):
     lang = message.text.strip()
     user_id = message.from_user.id
@@ -806,7 +806,7 @@ async def process_word_of_day_lang(message: types.Message, state: FSMContext):
         await state.clear()
 
 
-@dp.message(WordOfDayState.waiting_for_action)
+@router.message(WordOfDayState.waiting_for_action)
 async def process_wod_action(message: types.Message, state: FSMContext):
     text = message.text
     data = await state.get_data()
@@ -814,14 +814,14 @@ async def process_wod_action(message: types.Message, state: FSMContext):
     if text == "🚪 Вихід":
         await cmd_exit(message, state)
     elif text == "➡️ Наступне слово":
-        # FIX: Прив'язуємо (mount) повідомлення до бота, щоб працював .answer()
+        # FIX: Використовуємо message.bot, оскільки bot більше не глобальний
         msg = types.Message(
             message_id=0,
             date=datetime.now(),
             chat=message.chat,
             text=data.get('lang', 'English'),
             from_user=message.from_user
-        ).as_(bot)
+        ).as_(message.bot)
 
         await process_word_of_day_lang(msg, state)
     elif text == "➕ Додати це слово":
@@ -842,7 +842,7 @@ async def process_wod_action(message: types.Message, state: FSMContext):
 
 
 # Перегляд статистики
-@dp.message(Command("stats"))
+@router.message(Command("stats"))
 async def cmd_stats(message: types.Message):
     user_id = message.from_user.id
     words = get_user_words(user_id)
@@ -883,7 +883,7 @@ async def cmd_stats(message: types.Message):
 
 
 # Режим практики
-@dp.message(Command("practice"))
+@router.message(Command("practice"))
 async def cmd_practice(message: types.Message, state: FSMContext):
     words = get_user_words(message.from_user.id)
     if not words:
@@ -903,7 +903,7 @@ async def cmd_practice(message: types.Message, state: FSMContext):
 
 
 # Вибір мови для практики та генерація списку слів
-@dp.message(PracticeWord.waiting_for_language)
+@router.message(PracticeWord.waiting_for_language)
 async def practice_choose_lang(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     text = message.text.strip()
@@ -938,7 +938,7 @@ async def send_practice_q(message, w):
 
 
 # Перевірка відповіді користувача в режимі практики
-@dp.message(PracticeWord.waiting_for_answer)
+@router.message(PracticeWord.waiting_for_answer)
 async def process_practice_ans(message: types.Message, state: FSMContext):
     if message.text == "/exit": await cmd_exit(message, state); return
     data = await state.get_data()
@@ -966,7 +966,7 @@ async def process_practice_ans(message: types.Message, state: FSMContext):
 
 
 # Початок процесу видалення слова
-@dp.message(Command("delete_word"))
+@router.message(Command("delete_word"))
 async def cmd_delete_word(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     kb = get_main_kb(message.from_user.id)
@@ -975,7 +975,7 @@ async def cmd_delete_word(message: types.Message, state: FSMContext):
 
 
 # Обробка видалення слова
-@dp.message(DeleteWord.waiting_for_word)
+@router.message(DeleteWord.waiting_for_word)
 async def process_delete_word(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     text = message.text.strip()
@@ -995,7 +995,7 @@ async def process_delete_word(message: types.Message, state: FSMContext):
 
 
 # Початок перегляду всіх слів
-@dp.message(Command("all_words"))
+@router.message(Command("all_words"))
 async def cmd_all_words(message: types.Message, state: FSMContext):
     update_last_active(message.from_user.id)
     user_id = message.from_user.id
@@ -1022,7 +1022,7 @@ async def cmd_all_words(message: types.Message, state: FSMContext):
 
 
 # Відображення слів для вибраної мови
-@dp.message(ViewWords.waiting_for_language)
+@router.message(ViewWords.waiting_for_language)
 async def process_view_language(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang_choice = message.text.strip()
@@ -1054,14 +1054,14 @@ async def process_view_language(message: types.Message, state: FSMContext):
 
 
 # Початок взаємодії з ШІ
-@dp.message(Command("AI"))
+@router.message(Command("AI"))
 async def cmd_ai(message: types.Message, state: FSMContext):
     await state.set_state(AIHelper.waiting_for_prompt)
     await message.answer("🤖 Введіть слово для пояснення:", reply_markup=get_main_kb(message.from_user.id))
 
 
 # Отримання запиту для ШІ
-@dp.message(AIHelper.waiting_for_prompt)
+@router.message(AIHelper.waiting_for_prompt)
 async def process_ai_prompt(message: types.Message, state: FSMContext):
     text = message.text.strip()
 
@@ -1085,7 +1085,7 @@ async def process_ai_prompt(message: types.Message, state: FSMContext):
 
 
 # Обробка мови запиту та отримання відповіді від ШІ
-@dp.message(AIHelper.waiting_for_language)
+@router.message(AIHelper.waiting_for_language)
 async def process_ai_language(message: types.Message, state: FSMContext):
     language_of_word = message.text.strip()
 
@@ -1126,7 +1126,7 @@ async def process_ai_language(message: types.Message, state: FSMContext):
 
 
 # Обробник невідомих команд або тексту
-@dp.message()
+@router.message()
 async def unknown_command(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state is not None:
@@ -1137,17 +1137,31 @@ async def unknown_command(message: types.Message, state: FSMContext):
     await message.answer("❌ Невідома команда.\n" + COMMANDS_TEXT, reply_markup=get_main_kb(message.from_user.id))
 
 
-# Запуск бота
+# Запуск бота (Виправлено: створення Bot і Dispatcher всередині main)
 async def main():
     print("Бота запущено")
+    
+    # 1. Ініціалізуємо бота та диспетчера ТУТ, всередині циклу подій
+    bot = Bot(token=TELEGRAM_BOT_TOKEN)
+    dp = Dispatcher()
+    
+    # 2. Підключаємо наш Router
+    dp.include_router(router)
+    
+    # 3. Підключаємо Middleware
     dp.message.middleware(ThrottlingMiddleware(throttle_time=1))
+
+    # 4. Запускаємо фонові задачі (веб-сервер та пінгувальник)
     asyncio.create_task(start_web_server())
     asyncio.create_task(keep_alive_task())
+    
+    # 5. Очищаємо вебхук і запускаємо поллінг
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
-    asyncio.run(main())
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot stopped")
