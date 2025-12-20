@@ -14,30 +14,24 @@ from google.genai import types as genai_types
 from cachetools import TTLCache
 from typing import Any, Awaitable, Callable, Dict
 import aiohttp
+from aiohttp import web
 import os
-#------
 from dotenv import load_dotenv
 from typing import Dict, Any
 
 def load_config_from_env(env_file: str = ".env") -> Dict[str, Any]:
     #Завантажує конфігураційні змінні (токени, ключі, URL) з .env файлу та повертає їх у вигляді словника.
-
-    # 1. Завантажуємо змінні оточення. Це робить їх доступними через os.getenv()
     load_dotenv(dotenv_path=env_file)
 
     config = {}
 
-    # 2. Зчитуємо прості змінні
     config["TELEGRAM_BOT_TOKEN"] = os.getenv("TELEGRAM_BOT_TOKEN", "")
     config["PIXABAY_API_KEY"] = os.getenv("PIXABAY_API_KEY", "")
     config["WEB_APP_URL"] = os.getenv("WEB_APP_URL", "")
 
-    # 3. Обробка списку ключів GEMINI_API_KEYS
     gemini_keys_str = os.getenv("GEMINI_API_KEYS")
     
     if gemini_keys_str:
-        # Розділяємо рядок за комою, видаляємо зайві пробіли 
-        # та відфільтровуємо порожні значення.
         config["GEMINI_API_KEYS"] = [key.strip() 
                                      for key in gemini_keys_str.split(',') 
                                      if key.strip()]
@@ -46,10 +40,8 @@ def load_config_from_env(env_file: str = ".env") -> Dict[str, Any]:
 
     return config
 
-#Використання функції
 config = load_config_from_env()
 
-# Заповнення ваших початкових змінних даними зі словника
 TELEGRAM_BOT_TOKEN = config["TELEGRAM_BOT_TOKEN"]
 PIXABAY_API_KEY = config["PIXABAY_API_KEY"]
 WEB_APP_URL = config["WEB_APP_URL"]
@@ -177,10 +169,32 @@ def generate_content_safe(contents, config=None, model="gemini-2.5-flash"):
                 raise e
     raise Exception("❌ Всі API ключі вичерпано.")
 
+# Веб-сервер, щоб хостинг бачив відкритий порт
+async def health_check(request):
+    return web.Response(text="I am alive! Bot is running.")
 
-# ДОДАТКОВІ ФУНКЦІЇ (КАРТИНКИ ТА ІНФО)
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    port = int(os.environ.get("PORT", 8080)) 
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"🌍 Веб-сервер запущено на порту {port}")
 
-# Функція пошуку картинки на Pixabay (Оновлено: додано use_random)
+# Функція, яка робить щось кожні 40 секунд
+async def keep_alive_task():
+    while True:
+        await asyncio.sleep(40)
+        try:
+            print("40 секунд пройшло, бот активний...")
+        except Exception as e:
+            print(f"Error in keep_alive: {e}")
+
+
+# Функція пошуку картинки на Pixabay
 async def get_image_url(query, use_random=False):
     if not query or not PIXABAY_API_KEY:
         return None
@@ -1146,8 +1160,13 @@ async def unknown_command(message: types.Message, state: FSMContext):
 async def main():
     print("Бота запущено")
     dp.message.middleware(ThrottlingMiddleware(throttle_time=1))
+    asyncio.create_task(start_web_server())
+    asyncio.create_task(keep_alive_task())
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
