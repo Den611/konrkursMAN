@@ -74,7 +74,6 @@ CREATE TABLE IF NOT EXISTS users (
 """)
 
 # Створення таблиці слів користувачів, якщо вона не існує
-# Оновлено: додані поля для картинки, асоціації та транскрипції
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS user_words (
     user_id INTEGER,
@@ -103,8 +102,7 @@ def migrate_db():
             cursor.execute(f"ALTER TABLE user_words ADD COLUMN {col_name} {col_type}")
             print(f"✅ База даних оновлена: додано колонку {col_name}")
         except sqlite3.OperationalError:
-            pass  # Колонка вже існує
-
+            pass  
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN best_score INTEGER DEFAULT 0")
         print("✅ База даних оновлена: додано колонку best_score")
@@ -298,7 +296,6 @@ def add_word_to_db(user_id, word, translation, language, image_url=None, associa
 
 def get_user_words(user_id, language=None):
     try:
-        # Повертає 8 колонок. Індекси:
         # 0-word, 1-translation, 2-language, 3-usage_count, 4-image_url, 5-association, 6-transcription
         query = "SELECT word, translation, language, usage_count, image_url, association, transcription FROM user_words WHERE user_id=?"
         params = (user_id,)
@@ -326,7 +323,6 @@ def increment_usage_count(user_id, word, language=None):
 
 def get_user_level_info(user_id):
     words = get_user_words(user_id)
-    # w[3] - це usage_count (4-й елемент у вибірці)
     total_xp = sum([w[3] for w in words])
     level = 1
     xp_needed = 10
@@ -379,15 +375,9 @@ def get_main_kb(user_id):
     game_words = []
 
     if words_raw:
-        # Сортуємо слова за кількістю використань (найменші спочатку)
-        # index 3 - це usage_count
         words_raw.sort(key=lambda x: x[3])
-
-        # Беремо перші 50 слів
         sample = words_raw[:50]
-
         for w in sample:
-            # w[0] - слово, w[1] - переклад
             game_words.append({"w": w[0], "t": w[1]})
 
     # Кодуємо в JSON для URL
@@ -681,14 +671,8 @@ async def process_custom_translation(message: types.Message, state: FSMContext):
     language = data.get("language")
     auto_translation = data.get("auto_translation")
     final_translation = auto_translation if message.text.startswith("Зберегти:") else message.text
-
     await message.answer("⏳ Зберігаю, шукаю картинку та генерую асоціацію...")
-
-    # Паралельний запуск: Картинка + Інфо
-    # Спочатку отримуємо промпт для картинки від ШІ
     transcription, association, visual_prompt = await get_full_word_info(word, final_translation, language)
-
-    # Використовуємо цей промпт для пошуку картинки без тексту
     search_query = visual_prompt if visual_prompt else word
     image_url = await get_image_url(search_query)
 
@@ -749,15 +733,13 @@ async def process_word_of_day_lang(message: types.Message, state: FSMContext):
 
     lvl, _, _ = get_user_level_info(message.from_user.id)
     diff = "A1" if lvl <= 3 else "B1" if lvl <= 8 else "C1"
-
-    # --- ПЕРЕВІРКА НА УНІКАЛЬНІСТЬ ---
     user_words_list = get_user_words(message.from_user.id, lang)
     existing_words = {w[0].lower() for w in user_words_list}
 
     new_word = None
     translation = None
 
-    # Робимо до 3 спроб знайти нове слово
+    
     for i in range(3):
         prompt = (
             f"Згенеруй 1 (одне) цікаве слово мовою {lang} для рівня {diff}. "
@@ -875,7 +857,7 @@ async def cmd_stats(message: types.Message):
     # Статистика по мовах
     lang_stats = {}
     for w in words:
-        l = w[2]  # language
+        l = w[2]
         if l not in lang_stats:
             lang_stats[l] = 0
         lang_stats[l] += 1
@@ -909,7 +891,6 @@ async def cmd_practice(message: types.Message, state: FSMContext):
                              reply_markup=get_main_kb(message.from_user.id))
         return
 
-    # Оновлено: індекс 2 - мова
     languages = sorted(list(set([w[2] for w in words if w[2] is not None])))
     keyboard = [[types.KeyboardButton(text=l)] for l in languages]
     keyboard.append([types.KeyboardButton(text="Усі мови")])
