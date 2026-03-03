@@ -1,6 +1,8 @@
 aiogram==3.1.0
 deep-translator==1.11.1
-google-genai
 cachetools
 aiohttp
 python-dotenv
+asyncpg
+aiosqlite
+psycopg2-binary
