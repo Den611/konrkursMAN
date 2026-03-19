@@ -5,7 +5,6 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-
 SERVER_IP = os.getenv("SERVER_IP", "127.0.0.1")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD")

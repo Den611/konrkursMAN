@@ -70,7 +70,6 @@ async def init_connection():
 
     if FORCE_SQLITE:
         print("🎒 [DB] Примусовий АВТОНОМНИЙ режим (SQLite).")
-        import aiosqlite
         sqlite_conn = await aiosqlite.connect('backup_words.db')
         sqlite_conn.row_factory = aiosqlite.Row
         return
