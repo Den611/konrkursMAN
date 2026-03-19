@@ -110,7 +110,8 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS users (
             user_id BIGINT PRIMARY KEY, username TEXT, start_date TEXT, last_active TEXT,
             best_score INTEGER DEFAULT 0, level TEXT DEFAULT 'A1', hobbies TEXT, 
-            learning_style TEXT DEFAULT 'Універсал', streak_days INTEGER DEFAULT 0
+            learning_style TEXT DEFAULT 'Універсал', streak_days INTEGER DEFAULT 0,
+            interface_lang TEXT DEFAULT 'uk'
         )
     ''')
     await db_execute('''
@@ -127,9 +128,14 @@ async def init_db():
 
     # Міграції
     columns_users = [
-        ("start_date", "TEXT"), ("last_active", "TEXT"), ("best_score", "INTEGER DEFAULT 0"),
-        ("level", "TEXT DEFAULT 'A1'"), ("hobbies", "TEXT"), ("learning_style", "TEXT DEFAULT 'Універсал'"),
-        ("streak_days", "INTEGER DEFAULT 0")
+        ("start_date", "TEXT"), 
+        ("last_active", "TEXT"), 
+        ("best_score", "INTEGER DEFAULT 0"),
+        ("level", "TEXT DEFAULT 'A1'"), 
+        ("hobbies", "TEXT"), 
+        ("learning_style", "TEXT DEFAULT 'Універсал'"),
+        ("streak_days", "INTEGER DEFAULT 0"),
+        ("interface_lang", "TEXT DEFAULT 'uk'"), 
     ]
     for col, dtype in columns_users:
         try:
@@ -152,7 +158,7 @@ async def init_db():
 # --- ФУНКЦІЇ ДОСТУПУ ---
 async def add_user(user_id, username):
     try:
-        await db_execute("INSERT INTO users (user_id, username, start_date, last_active) VALUES ($1, $2, $3, $4)",
+        await db_execute("INSERT INTO users (user_id, username, start_date, last_active, interface_lang) VALUES ($1, $2, $3, $4, 'uk')",
                          user_id, username, datetime.now().isoformat(), datetime.now().isoformat())
     except:
         pass  # Ігноруємо якщо вже є
@@ -178,6 +184,16 @@ async def update_last_active(user_id):
 async def get_user_hobby(user_id):
     return await db_fetchval("SELECT hobbies FROM users WHERE user_id=$1", user_id)
 
+async def get_user_lang(user_id):
+    res = await db_fetchval("SELECT interface_lang FROM users WHERE user_id=$1", user_id)
+    return res if res else "uk"
+
+async def update_user_lang(user_id, lang):
+    await db_execute("UPDATE users SET interface_lang=$1 WHERE user_id=$2", lang, user_id)
+
+async def update_user_level(user_id, xp):
+    # Допоміжна функція для оновлення рівня, якщо потрібна буде
+    pass
 
 async def add_word_to_db(user_id, word, translation, language, image_url=None, association=None, transcription=None):
     exists = await db_fetchval("SELECT 1 FROM user_words WHERE user_id=$1 AND word=$2 AND language=$3", user_id, word,
@@ -247,3 +263,16 @@ async def get_best_score(user_id):
 
 async def update_best_score(user_id, score):
     await db_execute("UPDATE users SET best_score=$1 WHERE user_id=$2", score, user_id)
+
+
+async def get_user_lang(user_id):
+    return await db_fetchval(
+        "SELECT interface_lang FROM users WHERE user_id=$1", user_id
+    )
+ 
+ 
+async def set_user_lang(user_id, lang: str):
+    await db_execute(
+        "UPDATE users SET interface_lang=$1 WHERE user_id=$2", lang, user_id
+    )
+ 

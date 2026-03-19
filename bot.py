@@ -16,33 +16,17 @@ from typing import Callable, Dict, Any, Awaitable
 from config import BOT_TOKEN, WEB_APP_URL
 import ai_manager
 import database as db
+import i18n
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# Мови, які ВИВЧАЮТЬСЯ (не мова інтерфейсу)
 SUPPORTED_LANGUAGES = ["English", "German", "French", "Polish", "Spanish", "Italian"]
-
-COMMANDS_TEXT = (
-    "Доступні команди:\n"
-    "➕ /add_word – додати слово\n"
-    "🎯 /practice – тренування пам'яті\n"
-    "📊 /stats – твоя статистика\n"
-    "🏆 /top – таблиця лідерів\n"
-    "🌟 /word_of_day – слово дня\n"
-    "🤖 /AI – пояснення від ШІ\n"
-    "📝 /all_words – твій словник\n"
-    "📥 /import_words – масове завантаження\n"
-    "❌ /delete_word – видалити слово\n"
-    "💬 /feedback – надіслати відгук\n"
-    "⚙️ /set_mode – режим ШІ (Ollama/Gemini)\n"
-    "🗄️ /set_db – режим БД (авто/SQLite)\n"
-    "❓ /help – інформація\n"
-    "🚪 /exit – вихід"
-)
 
 
 # ─────────────────────────────────────────
-# MIDDLEWARE ANTI-SPAM
+# MIDDLEWARE: ANTI-SPAM + ЗАВАНТАЖЕННЯ МОВИ
 # ─────────────────────────────────────────
 class ThrottlingMiddleware(BaseMiddleware):
     def __init__(self, throttle_time: int = 1):
@@ -57,67 +41,31 @@ class ThrottlingMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+class LangMiddleware(BaseMiddleware):
+    """При кожному повідомленні підвантажує мову інтерфейсу з БД (якщо не кешована)."""
+    async def __call__(self, handler, event: types.Message, data: Dict[str, Any]) -> Any:
+        user_id = event.from_user.id
+        if i18n.get_user_lang(user_id) == i18n.DEFAULT_LANG:
+            lang_db = await db.get_user_lang(user_id)
+            if lang_db:
+                i18n.set_user_lang(user_id, lang_db)
+        return await handler(event, data)
+
+
 dp.message.middleware(ThrottlingMiddleware(1))
+dp.message.middleware(LangMiddleware())
 
 
 # ─────────────────────────────────────────
-# ДАНІ ПСИХОЛОГІЧНОГО ТЕСТУ
+# СКОРОЧЕННЯ: отримати переклад для юзера
 # ─────────────────────────────────────────
-STYLE_TEST = [
-    {
-        "question": "📖 <b>Питання 1 / 4</b>\nЯк ти зазвичай запам'ятовуєш нове слово?",
-        "options": [
-            ("👁 Уявляю картинку або асоціацію",         "Візуал"),
-            ("👂 Проговорюю його вголос кілька разів",    "Аудіал"),
-            ("⚙️ Шукаю логіку, корінь або правило",      "Логік"),
-            ("🖐 Одразу пишу речення і використовую",     "Практик"),
-        ]
-    },
-    {
-        "question": "🎬 <b>Питання 2 / 4</b>\nЯкий формат навчання тобі найближчий?",
-        "options": [
-            ("👁 Відеоуроки зі схемами та субтитрами",    "Візуал"),
-            ("👂 Подкасти або аудіокниги",                "Аудіал"),
-            ("⚙️ Підручники з чіткими таблицями",        "Логік"),
-            ("🖐 Живі розмови та практичні вправи",       "Практик"),
-        ]
-    },
-    {
-        "question": "🤔 <b>Питання 3 / 4</b>\nКоли застряєш на новому матеріалі — що робиш?",
-        "options": [
-            ("👁 Малюю схему або шукаю ілюстрацію",       "Візуал"),
-            ("👂 Пояснюю собі вголос або слухаю ще раз",  "Аудіал"),
-            ("⚙️ Розбираю покроково за правилами",        "Логік"),
-            ("🖐 Пробую застосувати і вчуся на помилках", "Практик"),
-        ]
-    },
-    {
-        "question": "🧩 <b>Питання 4 / 4</b>\nЯк виглядає твоє ідеальне тренування слів?",
-        "options": [
-            ("👁 Картки з яскравими картинками",           "Візуал"),
-            ("👂 Вимовляю слово і чую правильну вимову",   "Аудіал"),
-            ("⚙️ Порівнюю переклади та транскрипції",     "Логік"),
-            ("🖐 Міні-гра на швидкість або переклад",     "Практик"),
-        ]
-    },
-]
+def ul(user_id: int, key: str, **kwargs) -> str:
+    """Отримати переклад у мові конкретного користувача."""
+    return i18n.t(i18n.get_user_lang(user_id), key, **kwargs)
 
-HOBBY_CATEGORIES = {
-    "🎮 Ігри та технології":  "ігри, програмування, технології, кіберспорт",
-    "⚽ Спорт та фітнес":     "спорт, фітнес, футбол, плавання, бокс",
-    "🎵 Музика та мистецтво": "музика, малювання, кіно, фотографія, танці",
-    "📚 Наука та книги":      "читання, наука, математика, історія, біологія",
-    "✈️ Подорожі та природа": "подорожі, природа, туризм, тварини",
-    "🍕 Кулінарія та стиль":  "кулінарія, мода, дизайн, краса",
-    "✏️ Інше":                None,   # попросимо написати вручну
-}
 
-STYLE_DESCRIPTIONS = {
-    "Візуал":  "🖼 <b>Візуал</b> — ти запам'ятовуєш через образи.\nДодаватиму картинки та яскраві асоціації до кожного слова.",
-    "Аудіал":  "🎧 <b>Аудіал</b> — ти краще сприймаєш через звук.\nПідкреслюватиму транскрипцію та правильну вимову.",
-    "Логік":   "🧩 <b>Логік</b> — тобі важлива структура.\nДаватиму детальні пояснення з правилами та аналізом.",
-    "Практик": "🎮 <b>Практик</b> — ти вчишся в дії.\nЧастіше пропонуватиму ігри та практичні завдання.",
-}
+def ulang(user_id: int) -> str:
+    return i18n.get_user_lang(user_id)
 
 
 # ─────────────────────────────────────────
@@ -159,57 +107,54 @@ class FeedbackState(StatesGroup):
 
 
 # ─────────────────────────────────────────
-# ДОПОМІЖНІ ФУНКЦІЇ ОНБОРДИНГУ
+# ДОПОМІЖНІ ФУНКЦІЇ
 # ─────────────────────────────────────────
-def _style_keyboard(options):
+def _style_keyboard(options: list[str]) -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
-        keyboard=[[types.KeyboardButton(text=opt[0])] for opt in options],
+        keyboard=[[types.KeyboardButton(text=opt)] for opt in options],
         resize_keyboard=True, one_time_keyboard=True
     )
 
-def _hobby_keyboard(selected: list = None):
-    """Клавіатура категорій хобі з позначками вибраних і кнопкою підтвердження."""
-    if selected is None:
-        selected = []
+
+def _hobby_keyboard(lang: str, selected_ids: list) -> types.ReplyKeyboardMarkup:
+    """Клавіатура хобі: категорії з галочками + кнопка 'Готово'."""
+    cats = i18n.get_list(lang, "hobby_categories")
+    done_btn = i18n.t(lang, "hobby.done_btn")
     keyboard = []
-    for cat in HOBBY_CATEGORIES:
-        mark = "\u2705 " if cat in selected else ""
-        keyboard.append([types.KeyboardButton(text=f"{mark}{cat}")])
-    if selected:
-        keyboard.append([types.KeyboardButton(text="\u2714\ufe0f Готово")])
+    for cat in cats:
+        mark = "✅ " if cat["id"] in selected_ids else ""
+        keyboard.append([types.KeyboardButton(text=f"{mark}{cat['label']}")])
+    if selected_ids:
+        keyboard.append([types.KeyboardButton(text=done_btn)])
     return types.ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
-def _determine_style(scores: dict) -> str:
-    return max(scores, key=scores.get)
 
-def _score_answer(text: str, options: list):
-    for opt_text, style in options:
-        if text.strip() == opt_text.strip():
-            return style
-    return None
+def _find_cat_by_label(lang: str, text: str) -> dict | None:
+    """Знайти категорію хобі за відображуваним label (з або без ✅)."""
+    clean = text.replace("✅ ", "").strip()
+    cats = i18n.get_list(lang, "hobby_categories")
+    return next((c for c in cats if c["label"] == clean), None)
 
 
-# ─────────────────────────────────────────
-# ДОПОМІЖНІ ФУНКЦІЇ БОТА
-# ─────────────────────────────────────────
-async def get_main_kb(user_id):
+async def get_main_kb(user_id: int) -> types.ReplyKeyboardMarkup:
+    lang = ulang(user_id)
     words_raw  = await db.get_user_words(user_id)
     game_words = [{"w": w['word'], "t": w['translation']}
                   for w in sorted(words_raw, key=lambda x: x['usage_count'])[:50]] if words_raw else []
     game_url   = f"{WEB_APP_URL}?data={urllib.parse.quote(json.dumps(game_words))}" if game_words else WEB_APP_URL
 
     return types.ReplyKeyboardMarkup(keyboard=[
-        [types.KeyboardButton(text="🎮 Грати в слова (Web App)", web_app=types.WebAppInfo(url=game_url))],
+        [types.KeyboardButton(text=i18n.t(lang, "btn.play_webapp"), web_app=types.WebAppInfo(url=game_url))],
         [types.KeyboardButton(text="/add_word"),    types.KeyboardButton(text="/practice")],
         [types.KeyboardButton(text="/all_words"),   types.KeyboardButton(text="/stats")],
-        [types.KeyboardButton(text="/word_of_day"), types.KeyboardButton(text="🏆 ТОП Лідери")],
+        [types.KeyboardButton(text="/word_of_day"), types.KeyboardButton(text=i18n.t(lang, "btn.top"))],
         [types.KeyboardButton(text="/import_words"),types.KeyboardButton(text="🤖 /AI")],
-        [types.KeyboardButton(text="Відгук 💬"),    types.KeyboardButton(text="Допомога ❓")],
+        [types.KeyboardButton(text=i18n.t(lang, "btn.feedback")), types.KeyboardButton(text=i18n.t(lang, "btn.help"))],
         [types.KeyboardButton(text="/exit")],
     ], resize_keyboard=True)
 
 
-async def get_user_level_info(user_id):
+async def get_user_level_info(user_id: int):
     words    = await db.get_user_words(user_id)
     total_xp = sum(w['usage_count'] for w in words)
     level, xp_needed = 1, 10
@@ -220,271 +165,321 @@ async def get_user_level_info(user_id):
     return level, total_xp, xp_needed
 
 
-async def _update_level(user_id):
-    """Розраховує та зберігає рівень A1–C1 після кожного тренування."""
+async def _update_level(user_id: int):
     words    = await db.get_user_words(user_id)
     total_xp = sum(w['usage_count'] for w in words)
     await db.update_user_level(user_id, total_xp)
 
 
+def _lang_select_keyboard() -> types.InlineKeyboardMarkup:
+    """Inline-клавіатура вибору мови інтерфейсу."""
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(
+            text=f"{flag} {name}",
+            callback_data=f"setlang:{code}"
+        )]
+        for code, (name, flag) in i18n.SUPPORTED_UI_LANGS.items()
+    ])
+
+
 # ─────────────────────────────────────────
-# ОНБОРДИНГ — СТАРТ І 4 ПИТАННЯ ТЕСТУ
+# КОМАНДА /language — зміна мови інтерфейсу
+# ─────────────────────────────────────────
+@dp.message(Command("language"))
+async def cmd_language(message: types.Message, state: FSMContext):
+    await state.update_data(lang_select_purpose="change")
+    await message.answer(
+        i18n.t("uk", "lang_select"),   # Повідомлення у всіх 3 мовах — нейтральне
+        reply_markup=_lang_select_keyboard()
+    )
+
+
+@dp.callback_query(F.data.startswith("setlang:"))
+async def callback_set_lang(callback: types.CallbackQuery, state: FSMContext):
+    lang_code = callback.data.split(":")[1]
+    user_id   = callback.from_user.id
+
+    if lang_code not in i18n.SUPPORTED_UI_LANGS:
+        await callback.answer("Unknown language", show_alert=True)
+        return
+
+    # Зберегти в БД та кеш
+    await db.set_user_lang(user_id, lang_code)
+    i18n.set_user_lang(user_id, lang_code)
+
+    data    = await state.get_data()
+    purpose = data.get("lang_select_purpose", "change")
+
+    await callback.message.edit_text(i18n.t(lang_code, "lang_changed"))
+
+    if purpose == "register":
+        # Новий користувач — починаємо тест
+        await state.update_data(
+            scores={"visual": 0, "audial": 0, "logic": 0, "practice": 0}
+        )
+        await state.set_state(Registration.q1)
+        await callback.message.answer(i18n.t(lang_code, "start.welcome_new"), parse_mode="HTML")
+        q = i18n.get_list(lang_code, "style_test")[0]
+        await callback.message.answer(q["question"], parse_mode="HTML",
+                                      reply_markup=_style_keyboard(q["options"]))
+    else:
+        # Просто підтверджуємо зміну
+        await callback.message.answer(
+            i18n.t(lang_code, "lang_command_hint"),
+            reply_markup=await get_main_kb(user_id)
+        )
+    await callback.answer()
+
+
+# ─────────────────────────────────────────
+# /start
 # ─────────────────────────────────────────
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
-    await db.add_user(message.from_user.id, message.from_user.username or "Учень")
-    profile = await db.get_user_profile_data(message.from_user.id)
+    user_id = message.from_user.id
+    await db.add_user(user_id, message.from_user.username or "Учень")
+    profile = await db.get_user_profile_data(user_id)
 
     if not profile or not profile['hobbies'] or profile['hobbies'] == "повсякденне життя":
-        welcome_text = (
-            "🚀 <b>Вітаю у WordBot — твоєму персональному ШІ-репетиторі!</b>\n\n"
-            "Я аналізую твій тип сприйняття та інтереси, щоб генерувати асоціації "
-            "та приклади <i>саме під тебе</i>.\n\n"
-            "🧠 <b>Пройди короткий тест (4 питання) — навчання стане ефективнішим!</b>"
-        )
-        await state.update_data(scores={"Візуал": 0, "Аудіал": 0, "Логік": 0, "Практик": 0})
-        await state.set_state(Registration.q1)
-        await message.answer(welcome_text, parse_mode="HTML")
-        q = STYLE_TEST[0]
-        await message.answer(q["question"], parse_mode="HTML",
-                             reply_markup=_style_keyboard(q["options"]))
+        # Новий користувач — спочатку вибір мови
+        await state.update_data(lang_select_purpose="register")
+        await message.answer(i18n.t("uk", "lang_select"), reply_markup=_lang_select_keyboard())
     else:
-        await db.update_last_active(message.from_user.id)
+        # Повертається — завантажуємо мову і вітаємо
+        lang_db = await db.get_user_lang(user_id)
+        if lang_db:
+            i18n.set_user_lang(user_id, lang_db)
+        await db.update_last_active(user_id)
         await state.clear()
-        await message.answer("👋 З поверненням! Продовжимо навчання?",
-                             reply_markup=await get_main_kb(message.from_user.id))
+        await message.answer(
+            ul(user_id, "start.welcome_back"),
+            reply_markup=await get_main_kb(user_id)
+        )
+
+
+# ─────────────────────────────────────────
+# РЕЄСТРАЦІЯ — 4 питання тесту стилю
+# ─────────────────────────────────────────
+async def _ask_style_q(message: types.Message, lang: str, q_idx: int):
+    q = i18n.get_list(lang, "style_test")[q_idx]
+    await message.answer(q["question"], parse_mode="HTML",
+                         reply_markup=_style_keyboard(q["options"]))
+
+
+async def _handle_style_q(message: types.Message, state: FSMContext, q_idx: int, next_state):
+    lang   = ulang(message.from_user.id)
+    data   = await state.get_data()
+    scores = data["scores"]
+    q      = i18n.get_list(lang, "style_test")[q_idx]
+    style  = i18n.score_answer(message.text, q["options"])
+    if style:
+        scores[style] += 1
+    await state.update_data(scores=scores)
+    await state.set_state(next_state)
+    await _ask_style_q(message, lang, q_idx + 1)
 
 
 @dp.message(Registration.q1)
 async def reg_q1(message: types.Message, state: FSMContext):
-    data   = await state.get_data()
-    scores = data["scores"]
-    style  = _score_answer(message.text, STYLE_TEST[0]["options"])
-    if style:
-        scores[style] += 1
-    await state.update_data(scores=scores)
-    await state.set_state(Registration.q2)
-    q = STYLE_TEST[1]
-    await message.answer(q["question"], parse_mode="HTML",
-                         reply_markup=_style_keyboard(q["options"]))
-
+    await _handle_style_q(message, state, 0, Registration.q2)
 
 @dp.message(Registration.q2)
 async def reg_q2(message: types.Message, state: FSMContext):
-    data   = await state.get_data()
-    scores = data["scores"]
-    style  = _score_answer(message.text, STYLE_TEST[1]["options"])
-    if style:
-        scores[style] += 1
-    await state.update_data(scores=scores)
-    await state.set_state(Registration.q3)
-    q = STYLE_TEST[2]
-    await message.answer(q["question"], parse_mode="HTML",
-                         reply_markup=_style_keyboard(q["options"]))
-
+    await _handle_style_q(message, state, 1, Registration.q3)
 
 @dp.message(Registration.q3)
 async def reg_q3(message: types.Message, state: FSMContext):
-    data   = await state.get_data()
-    scores = data["scores"]
-    style  = _score_answer(message.text, STYLE_TEST[2]["options"])
-    if style:
-        scores[style] += 1
-    await state.update_data(scores=scores)
-    await state.set_state(Registration.q4)
-    q = STYLE_TEST[3]
-    await message.answer(q["question"], parse_mode="HTML",
-                         reply_markup=_style_keyboard(q["options"]))
-
+    await _handle_style_q(message, state, 2, Registration.q4)
 
 @dp.message(Registration.q4)
 async def reg_q4(message: types.Message, state: FSMContext):
+    lang   = ulang(message.from_user.id)
     data   = await state.get_data()
     scores = data["scores"]
-    style  = _score_answer(message.text, STYLE_TEST[3]["options"])
+    q      = i18n.get_list(lang, "style_test")[3]
+    style  = i18n.score_answer(message.text, q["options"])
     if style:
         scores[style] += 1
-    final_style = _determine_style(scores)
-    await state.update_data(final_style=final_style)
+    final_style = max(scores, key=scores.get)
+    await state.update_data(final_style=final_style, selected_hobbies=[])
     await state.set_state(Registration.hobby_category)
 
-    score_line = " | ".join([f"{k}: {v}" for k, v in scores.items()])
-    result_text = (
-        f"✅ <b>Результат тесту:</b>\n{STYLE_DESCRIPTIONS[final_style]}\n\n"
-        f"📊 Розподіл балів: {score_line}\n\n"
-        "🎯 <b>Тепер оберіть свою категорію інтересів:</b>"
-    )
-    await state.update_data(selected_hobbies=[])
-    await message.answer(result_text, parse_mode="HTML", reply_markup=_hobby_keyboard([]))
+    score_line  = " | ".join([f"{i18n.t(lang, f'style.{k}.name')}: {v}" for k, v in scores.items()])
+    style_desc  = i18n.t(lang, f"style.{final_style}.desc")
+    result_text = i18n.t(lang, "style_result", desc=style_desc, score_line=score_line)
+    await message.answer(result_text, parse_mode="HTML", reply_markup=_hobby_keyboard(lang, []))
 
 
 @dp.message(Registration.hobby_category)
 async def reg_hobby_category(message: types.Message, state: FSMContext):
+    lang     = ulang(message.from_user.id)
     data     = await state.get_data()
     selected = data.get("selected_hobbies", [])
     text     = message.text.strip()
+    done_btn = i18n.t(lang, "hobby.done_btn")
 
-    # Зняти ✅ якщо воно є (повторний тик = скасування)
-    clean_text = text.replace("\u2705 ", "").strip()
-
-    if text == "\u2714\ufe0f Готово":
-        # Якщо вибрано "Інше" — перейти до ручного введення, інакше завершити
-        if "\u270f\ufe0f Інше" in selected or "Інше" in selected:
-            selected = [s for s in selected if "Інше" not in s]
-            await state.update_data(selected_hobbies=selected)
+    if text == done_btn:
+        if "other" in selected or not selected:
+            if not selected:
+                await message.answer(i18n.t(lang, "hobby.at_least_one"),
+                                     reply_markup=_hobby_keyboard(lang, selected))
+                return
+            # є "other" — просимо написати вручну
+            sel_no_other = [s for s in selected if s != "other"]
+            await state.update_data(selected_hobbies=sel_no_other)
             await state.set_state(Registration.hobby_custom)
-            hobby_so_far = ", ".join(
-                HOBBY_CATEGORIES[s] for s in selected if s in HOBBY_CATEGORIES and HOBBY_CATEGORIES[s]
-            )
-            hint = f"Вже вибрано: <b>{hobby_so_far}</b>\n\n" if hobby_so_far else ""
+            hobby_so_far = _build_keyword_str(lang, sel_no_other)
+            prev = i18n.t(lang, "hobby.custom_prev", hobby_so_far=hobby_so_far) if hobby_so_far else ""
             await message.answer(
-                f"{hint}✏️ Напиши ще своє хобі (наприклад: <i>аніме, скейтборд, астрономія</i>):",
+                i18n.t(lang, "hobby.custom_prompt", prev=prev),
                 parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove()
             )
         else:
-            if not selected:
-                await message.answer("Оберіть хоча б одну категорію 👇",
-                                     reply_markup=_hobby_keyboard(selected))
-                return
-            await _finish_registration_multi(message, state, selected, custom=None)
+            await _finish_registration(message, state, selected)
         return
 
-    if clean_text not in HOBBY_CATEGORIES:
-        await message.answer("Оберіть категорію з кнопок 👇",
-                             reply_markup=_hobby_keyboard(selected))
+    cat = _find_cat_by_label(lang, text)
+    if not cat:
+        await message.answer(i18n.t(lang, "hobby.choose_from_btns"),
+                             reply_markup=_hobby_keyboard(lang, selected))
         return
 
-    # Тогл: якщо вже вибране — прибрати, якщо ні — додати
-    if clean_text in selected:
-        selected.remove(clean_text)
+    if cat["id"] in selected:
+        selected.remove(cat["id"])
     else:
-        selected.append(clean_text)
-
+        selected.append(cat["id"])
     await state.update_data(selected_hobbies=selected)
 
     count = len(selected)
     if count == 0:
-        hint = "Обери свої категорії інтересів (можна декілька) 👇"
+        hint = i18n.t(lang, "hobby.no_selection")
     else:
-        names = [s.split(" ", 1)[1] if " " in s else s for s in selected]
-        hint  = f"Вибрано ({count}): <b>{', '.join(names)}</b>\nДодай ще або натисни <b>✔️ Готово</b>"
+        cats_data = i18n.get_list(lang, "hobby_categories")
+        names = [c["label"].split(" ", 1)[1] for c in cats_data if c["id"] in selected]
+        hint = i18n.t(lang, "hobby.selected_hint", count=count, names=", ".join(names))
 
-    await message.answer(hint, parse_mode="HTML", reply_markup=_hobby_keyboard(selected))
+    await message.answer(hint, parse_mode="HTML", reply_markup=_hobby_keyboard(lang, selected))
 
 
 @dp.message(Registration.hobby_custom)
 async def reg_hobby_custom(message: types.Message, state: FSMContext):
-    hobby = message.text.strip()
-    if len(hobby) < 2:
-        await message.answer("Напиши хоча б одне хобі 😊")
+    lang = ulang(message.from_user.id)
+    if len(message.text.strip()) < 2:
+        await message.answer(i18n.t(lang, "hobby.custom_too_short"))
         return
     data     = await state.get_data()
     selected = data.get("selected_hobbies", [])
-    await _finish_registration_multi(message, state, selected, custom=hobby)
+    await _finish_registration(message, state, selected, custom=message.text.strip())
 
 
-async def _finish_registration_multi(message: types.Message, state: FSMContext,
-                                     selected: list, custom: str = None):
-    data        = await state.get_data()
-    final_style = data.get("final_style", "Універсал")
-
-    # Збираємо всі ключові слова
-    parts = []
-    for cat in selected:
-        val = HOBBY_CATEGORIES.get(cat)
-        if val:
-            parts.append(val)
+def _build_keyword_str(lang: str, selected_ids: list, custom: str = None) -> str:
+    cats_data = i18n.get_list(lang, "hobby_categories")
+    parts = [c["keywords"] for c in cats_data if c["id"] in selected_ids and c["keywords"]]
     if custom:
         parts.append(custom)
+    return ", ".join(parts) if parts else "повсякденне життя"
 
-    hobby_str = ", ".join(parts) if parts else "повсякденне життя"
 
+async def _finish_registration(message: types.Message, state: FSMContext,
+                                selected: list, custom: str = None):
+    lang        = ulang(message.from_user.id)
+    data        = await state.get_data()
+    final_style = data.get("final_style", "visual")
+
+    hobby_str = _build_keyword_str(lang, selected, custom)
     await db.update_user_profile(message.from_user.id, final_style, hobby_str)
     await state.clear()
 
-    # Красиві підписи для показу
-    display_names = []
-    for cat in selected:
-        display_names.append(cat.split(" ", 1)[1] if " " in cat else cat)
+    cats_data = i18n.get_list(lang, "hobby_categories")
+    display   = [c["label"].split(" ", 1)[1] for c in cats_data if c["id"] in selected]
     if custom:
-        display_names.append(custom)
+        display.append(custom)
 
-    finish_text = (
-        "🎉 <b>Профіль налаштовано!</b>\n\n"
-        f"🧠 Тип сприйняття: <b>{final_style}</b>\n"
-        f"🎯 Інтереси: <b>{', '.join(display_names)}</b>\n\n"
-        "Тепер ШІ генеруватиме асоціації та приклади <i>виключно у твоєму стилі</i>.\n"
-        "Натисни /help, щоб дізнатись усі команди 👇"
-    )
+    style_name = i18n.t(lang, f"style.{final_style}.name")
+    finish_text = i18n.t(lang, "reg_done",
+                         style=style_name,
+                         interests=", ".join(display) if display else hobby_str)
     await message.answer(finish_text, parse_mode="HTML",
                          reply_markup=await get_main_kb(message.from_user.id))
 
 
 # ─────────────────────────────────────────
-# ДОПОМОГА, СТАТИСТИКА, ТОП
+# /help
 # ─────────────────────────────────────────
 @dp.message(Command("help"))
-@dp.message(F.text == "Допомога ❓")
+@dp.message(F.text.in_(["Допомога ❓", "Pomoc ❓", "Help ❓"]))
 async def cmd_help(message: types.Message):
-    help_text = (
-        "📚 <b>Як працює твій розумний словник?</b>\n\n"
-        "➕ <b>/add_word</b> — Додай слово. ШІ сам знайде картинку та створить асоціацію.\n"
-        "🎯 <b>/practice</b> — Тренування. Алгоритм SuperMemo-2 вираховує, коли ти починаєш забувати слово.\n"
-        "🌟 <b>/word_of_day</b> — ШІ генерує для тебе випадкове корисне слово твого рівня.\n"
-        "🤖 <b>/AI</b> — Введи незрозуміле слово, і я поясню його на прикладах із твоїх хобі!\n"
-        "🎮 <b>Грати в слова</b> — Відкриє міні-гру прямо в Telegram. Заробляй бали!\n"
-        "🏆 <b>ТОП Лідери</b> — Перевір, на якому ти місці серед усіх учнів."
-    )
-    await message.answer(help_text, parse_mode="HTML",
+    await message.answer(ul(message.from_user.id, "help.title"), parse_mode="HTML",
                          reply_markup=await get_main_kb(message.from_user.id))
 
 
+# ─────────────────────────────────────────
+# /stats
+# ─────────────────────────────────────────
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
-    words   = await db.get_user_words(message.from_user.id)
-    lvl, cur_xp, next_xp = await get_user_level_info(message.from_user.id)
+    uid  = message.from_user.id
+    lang = ulang(uid)
+    words   = await db.get_user_words(uid)
+    lvl, cur_xp, next_xp = await get_user_level_info(uid)
     bar     = "🟩" * int((cur_xp / max(1, next_xp)) * 10) + "⬜" * (10 - int((cur_xp / max(1, next_xp)) * 10))
-    best    = await db.get_best_score(message.from_user.id)
-    profile = await db.get_user_profile_data(message.from_user.id)
-    style   = profile['learning_style'] if profile and profile['learning_style'] else "Не визначено"
-    hobby   = profile['hobbies']        if profile and profile['hobbies']        else "Не вказано"
+    best    = await db.get_best_score(uid)
+    profile = await db.get_user_profile_data(uid)
+
+    raw_style = profile['learning_style'] if profile and profile['learning_style'] else None
+    style = i18n.get_style_display(lang, raw_style) if raw_style else i18n.t(lang, "stats.no_style")
+    hobby = profile['hobbies'] if profile and profile['hobbies'] else i18n.t(lang, "stats.no_hobby")
+
+    pts = i18n.t(lang, "stats.points")
     stats = (
-        f"📊 <b>Твій Профіль</b>\n"
-        f"👤 Тип учня: <b>{style}</b>\n"
-        f"🎯 Хобі: <b>{hobby}</b>\n\n"
-        f"🏆 Рівень: <b>{lvl}</b>\n"
-        f"⭐ Досвід: {cur_xp}/{next_xp}\n"
+        f"{i18n.t(lang, 'stats.title')}\n"
+        f"{i18n.t(lang, 'stats.style_label')} <b>{style}</b>\n"
+        f"{i18n.t(lang, 'stats.hobby_label')} <b>{hobby}</b>\n\n"
+        f"{i18n.t(lang, 'stats.level_label')} <b>{lvl}</b>\n"
+        f"{i18n.t(lang, 'stats.xp_label')} {cur_xp}/{next_xp}\n"
         f"[{bar}]\n\n"
-        f"📚 Збережено слів: {len(words)}\n"
-        f"🎮 Рекорд у міні-грі: <b>{best}</b> балів"
+        f"{i18n.t(lang, 'stats.words_label')} {len(words)}\n"
+        f"{i18n.t(lang, 'stats.record_label')} <b>{best}</b>{pts}"
     )
     await message.answer(stats, parse_mode="HTML",
-                         reply_markup=await get_main_kb(message.from_user.id))
+                         reply_markup=await get_main_kb(uid))
 
 
+# ─────────────────────────────────────────
+# /top
+# ─────────────────────────────────────────
 @dp.message(Command("top"))
-@dp.message(F.text == "🏆 ТОП Лідери")
+@dp.message(F.text.in_(["🏆 ТОП Лідери", "🏆 TOP Gracze", "🏆 TOP Players"]))
 async def cmd_top(message: types.Message):
+    uid  = message.from_user.id
+    lang = ulang(uid)
     top_users = await db.get_top_users(10)
     if not top_users:
-        return await message.answer("Поки що ніхто не грав у міні-гру. Будь першим!",
-                                    reply_markup=await get_main_kb(message.from_user.id))
-    medals   = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-    top_text = "🏆 <b>ТАБЛИЦЯ ЛІДЕРІВ (Міні-гра)</b> 🏆\n\n"
+        return await message.answer(i18n.t(lang, "top.empty"),
+                                    reply_markup=await get_main_kb(uid))
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    pts    = i18n.t(lang, "top.points")
+    text   = i18n.t(lang, "top.title")
     for i, user in enumerate(top_users):
-        name      = user['username'] if user['username'] else "Таємний учень"
-        top_text += f"{medals[i]} <b>{name}</b> — {user['best_score']} балів\n"
-    top_text += "\n<i>Грай у Web App, щоб піднятися в рейтингу!</i>"
-    await message.answer(top_text, parse_mode="HTML",
-                         reply_markup=await get_main_kb(message.from_user.id))
+        name  = user['username'] or i18n.t(lang, "top.anon")
+        text += f"{medals[i]} <b>{name}</b> — {user['best_score']}{pts}\n"
+    text += i18n.t(lang, "top.footer")
+    await message.answer(text, parse_mode="HTML",
+                         reply_markup=await get_main_kb(uid))
 
 
+# ─────────────────────────────────────────
+# /exit
+# ─────────────────────────────────────────
 @dp.message(Command("exit"))
 async def cmd_exit(message: types.Message, state: FSMContext):
-    await db.update_last_active(message.from_user.id)
+    uid = message.from_user.id
+    await db.update_last_active(uid)
     await state.clear()
-    await message.answer(f"🚪 Ви вийшли з поточного режиму.\n\n{COMMANDS_TEXT}",
-                         reply_markup=await get_main_kb(message.from_user.id))
+    await message.answer(
+        ul(uid, "exit.done", commands=ul(uid, "help.commands_list")),
+        reply_markup=await get_main_kb(uid)
+    )
 
 
 # ─────────────────────────────────────────
@@ -492,28 +487,30 @@ async def cmd_exit(message: types.Message, state: FSMContext):
 # ─────────────────────────────────────────
 @dp.message(Command("add_word"))
 async def cmd_add_word(message: types.Message, state: FSMContext):
-    await db.update_last_active(message.from_user.id)
+    uid = message.from_user.id
+    await db.update_last_active(uid)
     await state.set_state(AddWord.waiting_for_word)
-    await message.answer("✏️ Введіть слово для додавання:",
-                         reply_markup=await get_main_kb(message.from_user.id))
+    await message.answer(ul(uid, "add_word.enter_word"),
+                         reply_markup=await get_main_kb(uid))
 
 
 @dp.message(AddWord.waiting_for_word)
 async def process_word(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if text == '/exit': return await cmd_exit(message, state)
-    await state.update_data(word=text)
+    if message.text == '/exit': return await cmd_exit(message, state)
+    uid = message.from_user.id
+    await state.update_data(word=message.text.strip())
     lang_kb = types.ReplyKeyboardMarkup(
         keyboard=[[types.KeyboardButton(text=l)] for l in SUPPORTED_LANGUAGES] +
                  [[types.KeyboardButton(text="/exit")]],
         resize_keyboard=True, one_time_keyboard=True)
     await state.set_state(AddWord.waiting_for_language)
-    await message.answer("🌍 Оберіть мову:", reply_markup=lang_kb)
+    await message.answer(ul(uid, "add_word.choose_lang"), reply_markup=lang_kb)
 
 
 @dp.message(AddWord.waiting_for_language)
 async def process_language(message: types.Message, state: FSMContext):
     if message.text == '/exit': return await cmd_exit(message, state)
+    uid = message.from_user.id
     await state.update_data(language=message.text.strip())
     word = (await state.get_data())['word']
     try:
@@ -521,37 +518,46 @@ async def process_language(message: types.Message, state: FSMContext):
     except:
         auto_trans = "Помилка"
     await state.update_data(auto_translation=auto_trans)
+    save_label = ul(uid, "add_word.save_btn", translation=auto_trans)
     trans_kb = types.ReplyKeyboardMarkup(
-        keyboard=[[types.KeyboardButton(text=f"Зберегти: {auto_trans}")],
+        keyboard=[[types.KeyboardButton(text=save_label)],
                   [types.KeyboardButton(text="/exit")]],
         resize_keyboard=True, one_time_keyboard=True)
     await state.set_state(AddWord.waiting_for_translation)
-    safe_trans = html.escape(auto_trans)
-    await message.answer(f"🔍 Автопереклад: <b>{safe_trans}</b>\nНатисніть кнопку або напишіть свій:",
-                         reply_markup=trans_kb, parse_mode="HTML")
+    await message.answer(
+        ul(uid, "add_word.autotrans", translation=html.escape(auto_trans)),
+        reply_markup=trans_kb, parse_mode="HTML"
+    )
 
 
 @dp.message(AddWord.waiting_for_translation)
 async def process_custom_translation(message: types.Message, state: FSMContext):
     if message.text == '/exit': return await cmd_exit(message, state)
-    data              = await state.get_data()
-    final_translation = data['auto_translation'] if message.text.startswith("Зберегти:") else message.text.strip()
-    await message.answer("⏳ Зберігаю, шукаю картинку та асоціацію...")
+    uid  = message.from_user.id
+    data = await state.get_data()
+    final_translation = (data['auto_translation']
+                         if message.text.startswith("Зберегти:") or message.text.startswith("Zapisz:") or message.text.startswith("Save:")
+                         else message.text.strip())
+    await message.answer(ul(uid, "add_word.saving"))
     transc, assoc, visual = await ai_manager.get_full_word_info(data['word'], final_translation, data['language'])
     img = await ai_manager.get_image_url(visual)
     if not img: img = await ai_manager.get_image_url(data['word'])
     if not img: img = await ai_manager.get_image_url(final_translation)
-    added     = await db.add_word_to_db(message.from_user.id, data['word'], final_translation,
-                                        data['language'], img, assoc, transc)
-    safe_word = html.escape(data['word'])
-    safe_tr   = html.escape(final_translation)
-    safe_as   = html.escape(assoc)
-    safe_tc   = html.escape(transc)
-    text      = (f"✅ <b>Додано:</b> {safe_word} {safe_tc} — {safe_tr}\n🧠 <i>{safe_as}</i>"
-                 if added else "⚠️ Слово вже є у словнику.")
+    added = await db.add_word_to_db(message.from_user.id, data['word'], final_translation,
+                                    data['language'], img, assoc, transc)
+    if added:
+        text = ul(uid, "add_word.added",
+                  word=html.escape(data['word']),
+                  transcription=html.escape(transc),
+                  translation=html.escape(final_translation),
+                  association=html.escape(assoc))
+    else:
+        text = ul(uid, "add_word.already_exists")
+
     inline_kb = types.InlineKeyboardMarkup(
-        inline_keyboard=[[types.InlineKeyboardButton(text="🔄 Інше фото",
-                          callback_data=f"regen:{data['word'][:20]}")]])
+        inline_keyboard=[[types.InlineKeyboardButton(
+            text=ul(uid, "btn.regen_photo"),
+            callback_data=f"regen:{data['word'][:20]}")]])
     try:
         if img and added:
             await message.answer_photo(img, caption=text, reply_markup=inline_kb, parse_mode="HTML")
@@ -559,12 +565,14 @@ async def process_custom_translation(message: types.Message, state: FSMContext):
             await message.answer(text, reply_markup=inline_kb if added else None, parse_mode="HTML")
     except Exception as e:
         print(f"⚠️ Помилка форматування: {e}")
-        clean = f"✅ Додано: {data['word']} {transc} — {final_translation}\n🧠 {assoc}"
+        clean = f"✅ {data['word']} {transc} — {final_translation}\n🧠 {assoc}"
         if img and added:
             await message.answer_photo(img, caption=clean, reply_markup=inline_kb)
         else:
             await message.answer(clean, reply_markup=inline_kb if added else None)
-    await message.answer("👇 Продовжити:", reply_markup=await get_main_kb(message.from_user.id))
+
+    await message.answer(ul(uid, "add_word.continue"),
+                         reply_markup=await get_main_kb(uid))
     await state.set_state(AddWord.waiting_for_word)
 
 
@@ -573,45 +581,48 @@ async def process_custom_translation(message: types.Message, state: FSMContext):
 # ─────────────────────────────────────────
 @dp.message(Command("word_of_day"))
 async def cmd_word_of_day(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     lang_kb = types.ReplyKeyboardMarkup(
         keyboard=[[types.KeyboardButton(text=l)] for l in SUPPORTED_LANGUAGES] +
                  [[types.KeyboardButton(text="/exit")]],
         resize_keyboard=True, one_time_keyboard=True)
     await state.set_state(WordOfDayState.waiting_for_language)
-    await message.answer("🌟 Оберіть мову для нового слова:", reply_markup=lang_kb)
+    await message.answer(ul(uid, "word_of_day.choose_lang"), reply_markup=lang_kb)
 
 
 @dp.message(WordOfDayState.waiting_for_language)
 async def process_wod_lang(message: types.Message, state: FSMContext):
-    lang = message.text.strip()
-    if lang == '/exit': return await cmd_exit(message, state)
-    await message.answer(f"⏳ Генерую слово ({lang})...")
-    lvl, _, _ = await get_user_level_info(message.from_user.id)
+    uid  = message.from_user.id
+    lang_learn = message.text.strip()
+    if lang_learn == '/exit': return await cmd_exit(message, state)
+    await message.answer(ul(uid, "word_of_day.generating", lang=lang_learn))
+    lvl, _, _ = await get_user_level_info(uid)
     diff      = "A1" if lvl <= 3 else "B1" if lvl <= 8 else "C1"
-    prompt    = (f"Generate exactly ONE word in {lang} for level {diff} with Ukrainian translation. "
+    prompt    = (f"Generate exactly ONE word in {lang_learn} for level {diff} with Ukrainian translation. "
                  f"Format strictly: Apple - Яблуко")
     result    = await ai_manager.generate_content_safe(prompt)
-    w, t      = None, None
+    w, t_word = None, None
     for line in result.split('\n'):
         line = line.strip().replace("*", "")
         if " - " in line and "Слово" not in line and "Word" not in line:
             parts = line.split(" - ", 1)
-            w, t  = parts[0].strip(), parts[1].strip()
+            w, t_word = parts[0].strip(), parts[1].strip()
             break
-    if w and t:
-        transc, assoc, visual = await ai_manager.get_full_word_info(w, t, lang)
+    if w and t_word:
+        transc, assoc, visual = await ai_manager.get_full_word_info(w, t_word, lang_learn)
         img = await ai_manager.get_image_url(visual)
         if not img: img = await ai_manager.get_image_url(w)
-        if not img: img = await ai_manager.get_image_url(t)
-        await state.update_data(new_word=w, translation=t, lang=lang,
+        if not img: img = await ai_manager.get_image_url(t_word)
+        await state.update_data(new_word=w, translation=t_word, lang=lang_learn,
                                 image_url=img, association=assoc, transcription=transc)
-        msg_text = f"🌟 Слово дня: <b>{html.escape(w)}</b> {html.escape(transc)}\n🇺🇦 Переклад: {html.escape(t)}"
-        inline   = types.InlineKeyboardMarkup(
-            inline_keyboard=[[types.InlineKeyboardButton(text="🔄 Інше фото",
-                              callback_data=f"regen:{w[:20]}")]])
-        wod_kb   = types.ReplyKeyboardMarkup(
-            keyboard=[[types.KeyboardButton(text="➕ Додати це слово")],
-                      [types.KeyboardButton(text="🚪 Вихід")]],
+        msg_text = ul(uid, "word_of_day.result",
+                      word=html.escape(w), transcription=html.escape(transc), translation=html.escape(t_word))
+        inline = types.InlineKeyboardMarkup(
+            inline_keyboard=[[types.InlineKeyboardButton(
+                text=ul(uid, "btn.regen_photo"), callback_data=f"regen:{w[:20]}")]])
+        wod_kb = types.ReplyKeyboardMarkup(
+            keyboard=[[types.KeyboardButton(text=ul(uid, "word_of_day.add_btn"))],
+                      [types.KeyboardButton(text=ul(uid, "btn.exit_menu"))]],
             resize_keyboard=True)
         try:
             if img:
@@ -620,28 +631,32 @@ async def process_wod_lang(message: types.Message, state: FSMContext):
                 await message.answer(msg_text, reply_markup=inline, parse_mode="HTML")
         except Exception as e:
             print(f"⚠️ Помилка Telegram: {e}")
-            clean = f"🌟 Слово дня: {w} {transc}\n🇺🇦 Переклад: {t}"
+            clean = f"🌟 {w} {transc}\n🇺🇦 {t_word}"
             if img:
                 await message.answer_photo(img, caption=clean, reply_markup=inline)
             else:
                 await message.answer(clean, reply_markup=inline)
-        await message.answer("Дії:", reply_markup=wod_kb)
+        await message.answer(ul(uid, "word_of_day.actions"), reply_markup=wod_kb)
         await state.set_state(WordOfDayState.waiting_for_action)
     else:
-        await message.answer(f"⚠️ ШІ трохи заплутався:\n{result}\n\nСпробуй ще раз!",
-                             reply_markup=await get_main_kb(message.from_user.id))
+        await message.answer(ul(uid, "word_of_day.ai_confused", result=result),
+                             reply_markup=await get_main_kb(uid))
         await state.clear()
 
 
 @dp.message(WordOfDayState.waiting_for_action)
 async def process_wod_action(message: types.Message, state: FSMContext):
-    if message.text == "🚪 Вихід": return await cmd_exit(message, state)
-    if message.text == "➕ Додати це слово":
+    uid  = message.from_user.id
+    exit_txt = ul(uid, "btn.exit_menu")
+    add_txt  = ul(uid, "word_of_day.add_btn")
+    if message.text == exit_txt: return await cmd_exit(message, state)
+    if message.text == add_txt:
         data  = await state.get_data()
-        added = await db.add_word_to_db(message.from_user.id, data['new_word'], data['translation'],
+        added = await db.add_word_to_db(uid, data['new_word'], data['translation'],
                                         data['lang'], data['image_url'], data['association'], data['transcription'])
-        await message.answer(f"✅ Додано!\n🧠 {data['association']}" if added else "⚠️ Вже є.",
-                             reply_markup=await get_main_kb(message.from_user.id))
+        text = (ul(uid, "word_of_day.added", association=data['association'])
+                if added else ul(uid, "word_of_day.already"))
+        await message.answer(text, reply_markup=await get_main_kb(uid))
         await state.clear()
 
 
@@ -650,32 +665,41 @@ async def process_wod_action(message: types.Message, state: FSMContext):
 # ─────────────────────────────────────────
 @dp.message(Command("practice"))
 async def cmd_practice(message: types.Message, state: FSMContext):
-    words = await db.get_user_words(message.from_user.id, for_review=True)
+    uid   = message.from_user.id
+    words = await db.get_user_words(uid, for_review=True)
     if not words:
-        return await message.answer("🎉 На сьогодні всі слова повторені!",
-                                    reply_markup=await get_main_kb(message.from_user.id))
+        return await message.answer(ul(uid, "practice.all_done"),
+                                    reply_markup=await get_main_kb(uid))
     await state.update_data(all_practice_words=[dict(w) for w in words])
+    all_langs_btn = ul(uid, "practice.all_langs_btn")
     lang_kb = types.ReplyKeyboardMarkup(
         keyboard=[[types.KeyboardButton(text=l)] for l in set(w['language'] for w in words)] +
-                 [[types.KeyboardButton(text="Усі мови")], [types.KeyboardButton(text="/exit")]],
+                 [[types.KeyboardButton(text=all_langs_btn)],
+                  [types.KeyboardButton(text="/exit")]],
         resize_keyboard=True, one_time_keyboard=True)
     await state.set_state(PracticeWord.waiting_for_language)
-    await message.answer(f"🎯 Слів на сьогодні: {len(words)}\nОберіть мову:", reply_markup=lang_kb)
+    await message.answer(
+        ul(uid, "practice.words_today", count=len(words)),
+        reply_markup=lang_kb
+    )
 
 
 @dp.message(PracticeWord.waiting_for_language)
 async def practice_choose_lang(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     if message.text == '/exit': return await cmd_exit(message, state)
-    target = (await state.get_data())['all_practice_words']
-    if message.text != "Усі мови":
+    target     = (await state.get_data())['all_practice_words']
+    all_langs  = ul(uid, "practice.all_langs_btn")
+    if message.text != all_langs:
         target = [w for w in target if w['language'] == message.text]
     if not target:
-        return await message.answer("Пусто.")
+        return await message.answer(ul(uid, "practice.empty_lang"))
     random.shuffle(target)
     await state.update_data(plist=target[:10], pidx=0)
     await state.set_state(PracticeWord.waiting_for_answer)
     w = target[0]
-    q = f"✏️ Перекладіть: <b>{html.escape(w['translation'])}</b> ({w['language']})"
+    q = ul(uid, "practice.question",
+           translation=html.escape(w['translation']), lang=w['language'])
     if w['image_url']:
         await message.answer_photo(w['image_url'], caption=q, parse_mode="HTML")
     else:
@@ -684,28 +708,32 @@ async def practice_choose_lang(message: types.Message, state: FSMContext):
 
 @dp.message(PracticeWord.waiting_for_answer)
 async def process_practice_ans(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     if message.text == "/exit": return await cmd_exit(message, state)
     data       = await state.get_data()
     w          = data['plist'][data['pidx']]
     is_correct = message.text.strip().lower() == w['word'].lower()
-    await db.update_word_progress(message.from_user.id, w['word'], is_correct)
-    await _update_level(message.from_user.id)   # ← оновлення A1–C1
+    await db.update_word_progress(uid, w['word'], is_correct)
+    await _update_level(uid)
 
     if is_correct:
-        await message.answer(f"✅ Правильно! {w['word']}")
+        await message.answer(ul(uid, "practice.correct", word=w['word']))
     else:
-        await message.answer(
-            f"❌ Ні. Правильно: {w['word']} {w['transcription'] or ''}\n💡 {w['association'] or ''}")
+        await message.answer(ul(uid, "practice.wrong",
+                                word=w['word'],
+                                transcription=w['transcription'] or '',
+                                association=w['association'] or ''))
 
     data['pidx'] += 1
     if data['pidx'] >= len(data['plist']):
-        await message.answer("🏁 Тренування завершено!",
-                             reply_markup=await get_main_kb(message.from_user.id))
+        await message.answer(ul(uid, "practice.finished"),
+                             reply_markup=await get_main_kb(uid))
         await state.clear()
     else:
         await state.update_data(pidx=data['pidx'])
         nw = data['plist'][data['pidx']]
-        q  = f"✏️ Перекладіть: <b>{html.escape(nw['translation'])}</b> ({nw['language']})"
+        q  = ul(uid, "practice.question",
+                translation=html.escape(nw['translation']), lang=nw['language'])
         if nw['image_url']:
             await message.answer_photo(nw['image_url'], caption=q, parse_mode="HTML")
         else:
@@ -718,13 +746,15 @@ async def process_practice_ans(message: types.Message, state: FSMContext):
 @dp.message(Command("AI"))
 @dp.message(F.text == "🤖 /AI")
 async def cmd_ai(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     await state.set_state(AIHelper.waiting_for_prompt)
-    await message.answer("🤖 Введіть слово для пояснення (або /exit):",
-                         reply_markup=await get_main_kb(message.from_user.id))
+    await message.answer(ul(uid, "ai.enter_word"),
+                         reply_markup=await get_main_kb(uid))
 
 
 @dp.message(AIHelper.waiting_for_prompt)
 async def process_ai_prompt(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     if message.text == '/exit': return await cmd_exit(message, state)
     await state.update_data(prompt=message.text.strip())
     lang_kb = types.ReplyKeyboardMarkup(
@@ -732,35 +762,37 @@ async def process_ai_prompt(message: types.Message, state: FSMContext):
                  [[types.KeyboardButton(text="/exit")]],
         resize_keyboard=True, one_time_keyboard=True)
     await state.set_state(AIHelper.waiting_for_language)
-    await message.answer("🌍 Мова слова?", reply_markup=lang_kb)
+    await message.answer(ul(uid, "ai.choose_lang"), reply_markup=lang_kb)
 
 
 @dp.message(AIHelper.waiting_for_language)
 async def process_ai_language(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     if message.text == '/exit': return await cmd_exit(message, state)
     data  = await state.get_data()
-    hobby = await db.get_user_hobby(message.from_user.id)
+    hobby = await db.get_user_hobby(uid)
     if not hobby: hobby = "повсякденне життя"
-    await message.answer("⏳ 🤖 ШІ аналізує слово та підбирає приклади...")
-    txt = "Помилка генерації"
+    await message.answer(ul(uid, "ai.thinking"))
+    txt = ul(uid, "errors.gen_error")
     try:
         txt, img = await asyncio.gather(
             ai_manager.get_ai_explanation_text(data['prompt'], message.text.strip(), hobby),
             ai_manager.get_image_url(data['prompt']))
         inline = types.InlineKeyboardMarkup(
-            inline_keyboard=[[types.InlineKeyboardButton(text="🔄 Інше фото",
-                              callback_data=f"regen:{data['prompt'][:20]}")]])
+            inline_keyboard=[[types.InlineKeyboardButton(
+                text=ul(uid, "btn.regen_photo"),
+                callback_data=f"regen:{data['prompt'][:20]}")]])
+        prefix = ul(uid, "ai.result_prefix")
         if img:
-            await message.answer_photo(img, caption=f"🤖 <b>Ось пояснення:</b>\n\n{txt}"[:1024],
+            await message.answer_photo(img, caption=f"{prefix}{txt}"[:1024],
                                        reply_markup=inline, parse_mode="HTML")
         else:
-            await message.answer(f"🤖 <b>Ось пояснення:</b>\n\n{txt}",
-                                 reply_markup=inline, parse_mode="HTML")
+            await message.answer(f"{prefix}{txt}", reply_markup=inline, parse_mode="HTML")
     except Exception as e:
         print(f"⚠️ Помилка виводу AI: {e}")
-        await message.answer(f"🤖 Пояснення:\n\n{txt}", parse_mode=None)
+        await message.answer(f"🤖\n\n{txt}", parse_mode=None)
     await state.set_state(AIHelper.waiting_for_prompt)
-    await message.answer("🤖 Ще одне слово? (або /exit)")
+    await message.answer(ul(uid, "ai.ask_next"))
 
 
 # ─────────────────────────────────────────
@@ -769,35 +801,41 @@ async def process_ai_language(message: types.Message, state: FSMContext):
 @dp.message(Command("delete_word"))
 async def cmd_delete_word(message: types.Message, state: FSMContext):
     await state.set_state(DeleteWord.waiting_for_word)
-    await message.answer("🗑️ Введіть слово для видалення:")
+    await message.answer(ul(message.from_user.id, "delete.enter_word"))
 
 
 @dp.message(DeleteWord.waiting_for_word)
 async def process_delete_word(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     if message.text == '/exit': return await cmd_exit(message, state)
-    await db.delete_word_from_db(message.from_user.id, message.text.strip())
-    await message.answer("🗑️ Виконано.", reply_markup=await get_main_kb(message.from_user.id))
+    await db.delete_word_from_db(uid, message.text.strip())
+    await message.answer(ul(uid, "delete.done"),
+                         reply_markup=await get_main_kb(uid))
     await state.clear()
 
 
 @dp.message(Command("all_words"))
 async def cmd_all_words(message: types.Message):
-    words = await db.get_user_words(message.from_user.id)
+    uid   = message.from_user.id
+    words = await db.get_user_words(uid)
     if not words:
-        return await message.answer("📭 Ваш словник порожній.")
-    text = "📝 Слова:\n" + "\n".join([f"{w['word']} — {w['translation']}" for w in words])
-    await message.answer(text[:4000])
+        return await message.answer(ul(uid, "all_words.empty"))
+    title = ul(uid, "all_words.title")
+    rows  = "\n".join([ul(uid, "all_words.row",
+                          word=w['word'], translation=w['translation']) for w in words])
+    await message.answer((title + rows)[:4000])
 
 
 @dp.message(Command("import_words"))
 async def cmd_import_words(message: types.Message):
-    await message.answer("📥 Надішліть файл .txt або .csv. Формат: слово - переклад - мова")
+    await message.answer(ul(message.from_user.id, "import.instructions"))
 
 
 @dp.message(F.document)
 async def process_document(message: types.Message):
+    uid = message.from_user.id
     if not message.document.file_name.endswith(('.csv', '.txt')): return
-    await message.answer("⏳ Обробляю словник...")
+    await message.answer(ul(uid, "import.processing"))
     try:
         file_in_io = io.BytesIO()
         await message.bot.download(message.document, destination=file_in_io)
@@ -806,30 +844,31 @@ async def process_document(message: types.Message):
         for line in lines:
             parts = [p.strip() for p in line.split('-' if '-' in line else ',')]
             if len(parts) >= 3:
-                if await db.add_word_to_db(message.from_user.id, parts[0], parts[1], parts[2]):
+                if await db.add_word_to_db(uid, parts[0], parts[1], parts[2]):
                     added += 1
-        await message.answer(f"✅ Імпортовано {added} слів!",
-                             reply_markup=await get_main_kb(message.from_user.id))
+        await message.answer(ul(uid, "import.done", count=added),
+                             reply_markup=await get_main_kb(uid))
     except Exception as e:
-        await message.answer(f"❌ Помилка: {e}")
+        await message.answer(ul(uid, "import.error", error=str(e)))
 
 
 @dp.message(Command("feedback"))
-@dp.message(F.text == "Відгук 💬")
+@dp.message(F.text.in_(["Відгук 💬", "Opinia 💬", "Feedback 💬"]))
 async def cmd_feedback(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     await state.set_state(FeedbackState.waiting_for_message)
-    await message.answer("💬 Напишіть ваш відгук або ідею (або /exit):",
+    await message.answer(ul(uid, "feedback.prompt"),
                          reply_markup=types.ReplyKeyboardRemove())
 
 
 @dp.message(FeedbackState.waiting_for_message)
 async def process_feedback(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
     if message.text == '/exit': return await cmd_exit(message, state)
-    await db.save_feedback(message.from_user.id, message.from_user.username or "Unknown",
-                           message.text or "Медіа")
+    await db.save_feedback(uid, message.from_user.username or "Unknown", message.text or "Медіа")
     await state.clear()
-    await message.answer("✅ Дякуємо за відгук!",
-                         reply_markup=await get_main_kb(message.from_user.id))
+    await message.answer(ul(uid, "feedback.thanks"),
+                         reply_markup=await get_main_kb(uid))
 
 
 # ─────────────────────────────────────────
@@ -837,42 +876,46 @@ async def process_feedback(message: types.Message, state: FSMContext):
 # ─────────────────────────────────────────
 @dp.message(Command("set_mode"))
 async def cmd_set_mode(message: types.Message):
-    current = "Gemini API" if ai_manager.FORCE_GEMINI else "Ollama (локальна)"
+    uid     = message.from_user.id
+    current = ul(uid, "set_mode.gemini") if ai_manager.FORCE_GEMINI else ul(uid, "set_mode.ollama")
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🤖 Ollama (локальна)", callback_data="mode:ollama")],
-        [types.InlineKeyboardButton(text="☁️ Gemini API (хмара)", callback_data="mode:gemini")],
+        [types.InlineKeyboardButton(text=ul(uid, "set_mode.ollama"), callback_data="mode:ollama")],
+        [types.InlineKeyboardButton(text=ul(uid, "set_mode.gemini"), callback_data="mode:gemini")],
     ])
-    await message.answer(f"⚙️ Поточний режим ШІ: <b>{current}</b>\nОберіть новий:",
+    await message.answer(ul(uid, "set_mode.current", mode=current),
                          parse_mode="HTML", reply_markup=kb)
 
 
 @dp.callback_query(F.data.startswith("mode:"))
 async def callback_set_mode(callback: types.CallbackQuery):
+    uid  = callback.from_user.id
     mode = callback.data.split(":")[1]
     ai_manager.set_ai_mode(force_gemini=(mode == "gemini"))
-    label = "☁️ Gemini API" if mode == "gemini" else "🤖 Ollama"
-    await callback.answer(f"Режим змінено: {label}", show_alert=True)
-    await callback.message.edit_text(f"✅ Активний режим ШІ: <b>{label}</b>", parse_mode="HTML")
+    label = ul(uid, "set_mode.gemini") if mode == "gemini" else ul(uid, "set_mode.ollama")
+    await callback.answer(f"{label}", show_alert=True)
+    await callback.message.edit_text(ul(uid, "set_mode.done", mode=label), parse_mode="HTML")
 
 
 @dp.message(Command("set_db"))
 async def cmd_set_db(message: types.Message):
-    current = "SQLite (локальна)" if db.FORCE_SQLITE else "PostgreSQL (авто)"
+    uid     = message.from_user.id
+    current = ul(uid, "set_db.sqlite_label") if db.FORCE_SQLITE else ul(uid, "set_db.auto_label")
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🗄️ Авто (PostgreSQL → SQLite)", callback_data="db:auto")],
-        [types.InlineKeyboardButton(text="📦 Примусово SQLite",           callback_data="db:sqlite")],
+        [types.InlineKeyboardButton(text=ul(uid, "set_db.auto"),   callback_data="db:auto")],
+        [types.InlineKeyboardButton(text=ul(uid, "set_db.sqlite"), callback_data="db:sqlite")],
     ])
-    await message.answer(f"⚙️ Поточний режим БД: <b>{current}</b>\nОберіть новий:",
+    await message.answer(ul(uid, "set_db.current", mode=current),
                          parse_mode="HTML", reply_markup=kb)
 
 
 @dp.callback_query(F.data.startswith("db:"))
 async def callback_set_db(callback: types.CallbackQuery):
-    mode  = callback.data.split(":")[1]
+    uid  = callback.from_user.id
+    mode = callback.data.split(":")[1]
     db.set_db_mode(force_sqlite=(mode == "sqlite"))
-    label = "📦 SQLite" if mode == "sqlite" else "🗄️ Авто (PostgreSQL)"
-    await callback.answer(f"Режим БД змінено: {label}", show_alert=True)
-    await callback.message.edit_text(f"✅ Активний режим БД: <b>{label}</b>", parse_mode="HTML")
+    label = ul(uid, "set_db.sqlite_label") if mode == "sqlite" else ul(uid, "set_db.auto_label")
+    await callback.answer(f"{label}", show_alert=True)
+    await callback.message.edit_text(ul(uid, "set_db.done", mode=label), parse_mode="HTML")
 
 
 # ─────────────────────────────────────────
@@ -880,22 +923,24 @@ async def callback_set_db(callback: types.CallbackQuery):
 # ─────────────────────────────────────────
 @dp.callback_query(F.data.startswith("regen:"))
 async def callback_regenerate(callback: types.CallbackQuery):
+    uid = callback.from_user.id
     try:
         word_prefix = callback.data.split(":")[1]
         new_url     = await ai_manager.get_image_url(word_prefix, use_random=True)
         if new_url:
-            await db.db_execute("UPDATE user_words SET image_url=$1 WHERE user_id=$2 AND word LIKE $3",
-                                new_url, callback.from_user.id, f"{word_prefix}%")
+            await db.db_execute(
+                "UPDATE user_words SET image_url=$1 WHERE user_id=$2 AND word LIKE $3",
+                new_url, uid, f"{word_prefix}%")
             await callback.message.edit_media(
                 media=types.InputMediaPhoto(media=new_url, caption=callback.message.caption,
                                             parse_mode="HTML"),
                 reply_markup=callback.message.reply_markup)
-            await callback.answer("Фото оновлено!")
+            await callback.answer(ul(uid, "btn.photo_updated"))
         else:
-            await callback.answer("Не знайдено іншого фото", show_alert=True)
+            await callback.answer(ul(uid, "btn.no_photo"), show_alert=True)
     except Exception as e:
         print(f"⚠️ Помилка регенерації: {e}")
-        await callback.answer("Помилка", show_alert=True)
+        await callback.answer(ul(uid, "errors.regen_err"), show_alert=True)
 
 
 # ─────────────────────────────────────────
@@ -903,20 +948,19 @@ async def callback_regenerate(callback: types.CallbackQuery):
 # ─────────────────────────────────────────
 @dp.message(F.content_type == types.ContentType.WEB_APP_DATA)
 async def process_web_app_data(message: types.Message):
+    uid  = message.from_user.id
     data = json.loads(message.web_app_data.data)
     if data.get('type') == 'game_result':
         score = data.get('score', 0)
         for w in data.get('learned_words', []):
-            await db.update_word_progress(message.from_user.id, w, True)
-        await _update_level(message.from_user.id)   # ← оновлення A1–C1
-
-        current_best = await db.get_best_score(message.from_user.id)
-        msg = (f"🎮 Результат: {score} балів!\n"
-               f"📚 Слів повторено: {len(data.get('learned_words', []))}")
+            await db.update_word_progress(uid, w, True)
+        await _update_level(uid)
+        current_best = await db.get_best_score(uid)
+        msg = ul(uid, "webapp.result", score=score, count=len(data.get('learned_words', [])))
         if score > current_best:
-            await db.update_best_score(message.from_user.id, score)
-            msg += f"\n🏆 Новий рекорд! (Було: {current_best})"
-        await message.answer(msg, reply_markup=await get_main_kb(message.from_user.id))
+            await db.update_best_score(uid, score)
+            msg += ul(uid, "webapp.new_record", old=current_best)
+        await message.answer(msg, reply_markup=await get_main_kb(uid))
 
 
 # ─────────────────────────────────────────
@@ -925,7 +969,7 @@ async def process_web_app_data(message: types.Message):
 async def main():
     await db.init_connection()
     await db.init_db()
-    print("Бот успішно запущено!")
+    print("Бот успішно запущено! 🌍 Multilang: uk / pl / en")
     await dp.start_polling(bot)
 
 
