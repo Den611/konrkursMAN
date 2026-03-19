@@ -267,6 +267,8 @@ async def _ask_style_q(message: types.Message, lang: str, q_idx: int):
 
 
 async def _handle_style_q(message: types.Message, state: FSMContext, q_idx: int, next_state):
+    if not message.text: 
+        return 
     lang   = ulang(message.from_user.id)
     data   = await state.get_data()
     scores = data["scores"]
@@ -312,6 +314,8 @@ async def reg_q4(message: types.Message, state: FSMContext):
 
 @dp.message(Registration.hobby_category)
 async def reg_hobby_category(message: types.Message, state: FSMContext):
+    if not message.text:   
+        return        
     lang     = ulang(message.from_user.id)
     data     = await state.get_data()
     selected = data.get("selected_hobbies", [])
