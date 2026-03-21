@@ -131,9 +131,9 @@
     "points": " points",
     "no_style": "Not defined",
     "no_hobby": "Not specified",
-    "lang_level": "🎓 Мовний рівень:",
-    "words_due": "⏰ Потребують повторення:",
-    "words_mastered": "✅ Засвоєно:"
+    "lang_level": "🎓 Language level:",
+    "words_due": "⏰ Due for review:",
+    "words_mastered": "✅ Mastered:"
   },
   "top": {
     "title": "🏆 <b>LEADERBOARD (Mini-game)</b> 🏆\n\n",
@@ -174,11 +174,11 @@
     "correct": "✅ Correct! {word}",
     "wrong": "❌ No. Correct answer: {word} {transcription}\n💡 {association}",
     "finished": "🏁 Training completed!",
-    "sm2_hint": "⏱ Інтервал: {interval} дн. | Складність: {ef}",
-    "streak_msg": "🔥 Серія: {streak} днів поспіль!",
-    "streak_achievement": "🏅 Досягнення: {streak}-денна серія!",
-    "summary_level": "📈 Рівень: {level}",
-    "summary_streak": "🔥 Серія: {streak} дн."
+    "sm2_hint": "⏱ Interval: {interval} days | Difficulty: {ef}",
+    "streak_msg": "🔥 Streak: {streak} days in a row!",
+    "streak_achievement": "🏅 Achievement: {streak}-day streak!",
+    "summary_level": "📈 Level: {level}",
+    "summary_streak": "🔥 Streak: {streak} days"
   },
   "ai": {
     "enter_word": "🤖 Enter a word for explanation (or /exit):",
