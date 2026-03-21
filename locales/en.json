@@ -1,0 +1,227 @@
+{
+  "meta": {
+    "name": "English",
+    "code": "en",
+    "flag": "🇬🇧"
+  },
+  "lang_select": "🌍 Оберіть мову інтерфейсу\nChoose interface language\nWybierz język interfejsu:",
+  "lang_changed": "✅ Language changed to English 🇬🇧",
+  "lang_command_hint": "🌍 Change interface language:",
+  "start": {
+    "welcome_new": "🚀 <b>Welcome to WordBot — your personal AI tutor!</b>\n\nI analyse your learning style and interests to generate associations and examples <i>tailored just for you</i>.\n\n🧠 <b>Take a quick test (4 questions) — it will make learning much more effective!</b>",
+    "welcome_back": "👋 Welcome back! Ready to continue learning?"
+  },
+  "style_test": [
+    {
+      "question": "📖 <b>Question 1 / 4</b>\nHow do you usually memorize a new word?",
+      "options": [
+        "👁 I visualize a picture or association",
+        "👂 I say it out loud several times",
+        "⚙️ I look for logic, root or a rule",
+        "🖐 I immediately write a sentence and use it"
+      ]
+    },
+    {
+      "question": "🎬 <b>Question 2 / 4</b>\nWhat learning format suits you best?",
+      "options": [
+        "👁 Video lessons with diagrams and subtitles",
+        "👂 Podcasts or audiobooks",
+        "⚙️ Textbooks with clear tables",
+        "🖐 Live conversations and practical exercises"
+      ]
+    },
+    {
+      "question": "🤔 <b>Question 3 / 4</b>\nWhen you get stuck on new material — what do you do?",
+      "options": [
+        "👁 I draw a diagram or find an illustration",
+        "👂 I explain it to myself aloud or listen again",
+        "⚙️ I break it down step by step using rules",
+        "🖐 I try to apply it and learn from mistakes"
+      ]
+    },
+    {
+      "question": "🧩 <b>Question 4 / 4</b>\nWhat does your ideal word training look like?",
+      "options": [
+        "👁 Cards with colorful pictures",
+        "👂 I pronounce the word and hear the correct pronunciation",
+        "⚙️ I compare translations and transcriptions",
+        "🖐 A speed game or translation challenge"
+      ]
+    }
+  ],
+  "style": {
+    "visual": {
+      "name": "Visual",
+      "desc": "🖼 <b>Visual</b> — you memorize through images.\nI'll add pictures and vivid associations to every word."
+    },
+    "audial": {
+      "name": "Auditory",
+      "desc": "🎧 <b>Auditory</b> — you learn better through sound.\nI'll emphasize transcriptions and correct pronunciation."
+    },
+    "logic": {
+      "name": "Logical",
+      "desc": "🧩 <b>Logical</b> — structure is important to you.\nI'll give detailed explanations with rules and analysis."
+    },
+    "practice": {
+      "name": "Practical",
+      "desc": "🎮 <b>Practical</b> — you learn by doing.\nI'll offer games and practical tasks more often."
+    }
+  },
+  "style_result": "✅ <b>Test result:</b>\n{desc}\n\n📊 Score distribution: {score_line}\n\n🎯 <b>Now choose your interest categories:</b>",
+  "hobby_categories": [
+    {
+      "id": "games",
+      "label": "🎮 Games & Technology",
+      "keywords": "games, programming, technology, esports"
+    },
+    {
+      "id": "sport",
+      "label": "⚽ Sports & Fitness",
+      "keywords": "sports, fitness, football, swimming, boxing"
+    },
+    {
+      "id": "art",
+      "label": "🎵 Music & Art",
+      "keywords": "music, drawing, cinema, photography, dance"
+    },
+    {
+      "id": "science",
+      "label": "📚 Science & Books",
+      "keywords": "reading, science, mathematics, history, biology"
+    },
+    {
+      "id": "travel",
+      "label": "✈️ Travel & Nature",
+      "keywords": "travel, nature, tourism, animals"
+    },
+    {
+      "id": "food",
+      "label": "🍕 Cooking & Style",
+      "keywords": "cooking, fashion, design, beauty"
+    },
+    {
+      "id": "other",
+      "label": "✏️ Other",
+      "keywords": null
+    }
+  ],
+  "hobby": {
+    "done_btn": "✔️ Done",
+    "at_least_one": "Please select at least one category 👇",
+    "choose_from_btns": "Please choose a category from the buttons 👇",
+    "selected_hint": "Selected ({count}): <b>{names}</b>\nAdd more or press <b>✔️ Done</b>",
+    "no_selection": "Choose your interest categories (multiple allowed) 👇",
+    "custom_prompt": "{prev}✏️ Write your hobby (e.g.: <i>anime, skateboard, astronomy</i>):",
+    "custom_prev": "Already selected: <b>{hobby_so_far}</b>\n\n",
+    "custom_too_short": "Please write at least one hobby 😊"
+  },
+  "reg_done": "🎉 <b>Profile configured!</b>\n\n🧠 Learning type: <b>{style}</b>\n🎯 Interests: <b>{interests}</b>\n\nAI will now generate associations and examples <i>exclusively in your style</i>.\nPress /help to see all commands 👇",
+  "help": {
+    "title": "📚 <b>How does your smart dictionary work?</b>\n\n➕ <b>/add_word</b> — Add a word. AI will find a picture and create an association automatically.\n🎯 <b>/practice</b> — Training. The SuperMemo-2 algorithm calculates when you start forgetting a word.\n🌟 <b>/word_of_day</b> — AI generates a random useful word at your level.\n🤖 <b>/AI</b> — Enter a word and I'll explain it using examples from your hobbies!\n🎮 <b>Play words</b> — Opens a mini-game directly in Telegram. Earn points!\n🏆 <b>TOP Players</b> — Check your ranking among all students.",
+    "commands_list": "Available commands:\n➕ /add_word – add a word\n🎯 /practice – memory training\n📊 /stats – your statistics\n🏆 /top – leaderboard\n🌟 /word_of_day – word of the day\n🤖 /AI – AI explanation\n📝 /all_words – your dictionary\n📥 /import_words – bulk import\n❌ /delete_word – delete a word\n💬 /feedback – send feedback\n 🌍 /language – interface language\n❓ /help – information\n🚪 /exit – exit"
+  },
+  "stats": {
+    "title": "📊 <b>Your Profile</b>",
+    "style_label": "👤 Learner type:",
+    "hobby_label": "🎯 Hobbies:",
+    "level_label": "🏆 Level:",
+    "xp_label": "⭐ Experience:",
+    "words_label": "📚 Saved words:",
+    "record_label": "🎮 Mini-game record:",
+    "points": " points",
+    "no_style": "Not defined",
+    "no_hobby": "Not specified",
+    "lang_level": "🎓 Мовний рівень:",
+    "words_due": "⏰ Потребують повторення:",
+    "words_mastered": "✅ Засвоєно:"
+  },
+  "top": {
+    "title": "🏆 <b>LEADERBOARD (Mini-game)</b> 🏆\n\n",
+    "empty": "Nobody has played the mini-game yet. Be the first!",
+    "anon": "Mystery student",
+    "points": " points",
+    "footer": "\n<i>Play in the Web App to climb the rankings!</i>"
+  },
+  "exit": {
+    "done": "🚪 You exited the current mode.\n\n{commands}"
+  },
+  "add_word": {
+    "enter_word": "✏️ Enter the word to add:",
+    "choose_lang": "🌍 Choose language:",
+    "autotrans": "🔍 Auto-translation: <b>{translation}</b>\nPress the button or type your own:",
+    "save_btn": "Save: {translation}",
+    "saving": "⏳ Saving, searching for image and association...",
+    "added": "✅ <b>Added:</b> {word} {transcription} — {translation}\n🧠 <i>{association}</i>",
+    "already_exists": "⚠️ Word already exists in the dictionary.",
+    "continue": "👇 Continue:"
+  },
+  "word_of_day": {
+    "choose_lang": "🌟 Choose language for the new word:",
+    "generating": "⏳ Generating word ({lang})...",
+    "result": "🌟 Word of the day: <b>{word}</b> {transcription}\n🇺🇦 Translation: {translation}",
+    "actions": "Actions:",
+    "add_btn": "➕ Add this word",
+    "added": "✅ Added!\n🧠 {association}",
+    "already": "⚠️ Already exists.",
+    "ai_confused": "⚠️ AI got a bit confused:\n{result}\n\nPlease try again!"
+  },
+  "practice": {
+    "all_done": "🎉 All words reviewed for today!",
+    "words_today": "🎯 Words for today: {count}\nChoose language:",
+    "all_langs_btn": "All languages",
+    "empty_lang": "Empty.",
+    "question": "✏️ Translate: <b>{translation}</b> ({lang})",
+    "correct": "✅ Correct! {word}",
+    "wrong": "❌ No. Correct answer: {word} {transcription}\n💡 {association}",
+    "finished": "🏁 Training completed!",
+    "sm2_hint": "⏱ Інтервал: {interval} дн. | Складність: {ef}",
+    "streak_msg": "🔥 Серія: {streak} днів поспіль!",
+    "streak_achievement": "🏅 Досягнення: {streak}-денна серія!",
+    "summary_level": "📈 Рівень: {level}",
+    "summary_streak": "🔥 Серія: {streak} дн."
+  },
+  "ai": {
+    "enter_word": "🤖 Enter a word for explanation (or /exit):",
+    "choose_lang": "🌍 Language of the word?",
+    "thinking": "⏳ 🤖 AI is analysing the word and selecting examples...",
+    "result_prefix": "🤖 <b>Here is the explanation:</b>\n\n",
+    "ask_next": "🤖 Another word? (or /exit)"
+  },
+  "delete": {
+    "enter_word": "🗑️ Enter the word to delete:",
+    "done": "🗑️ Done."
+  },
+  "all_words": {
+    "empty": "📭 Your dictionary is empty.",
+    "title": "📝 Words:\n",
+    "row": "{word} — {translation}"
+  },
+  "import": {
+    "instructions": "📥 Send a .txt or .csv file. Format: word - translation - language",
+    "processing": "⏳ Processing dictionary...",
+    "done": "✅ Imported {count} words!",
+    "error": "❌ Error: {error}"
+  },
+  "feedback": {
+    "prompt": "💬 Write your feedback or idea (or /exit):",
+    "thanks": "✅ Thank you for your feedback!"
+  },
+  "btn": {
+    "play_webapp": "🎮 Play words (Web App)",
+    "top": "🏆 TOP Players",
+    "feedback": "Feedback 💬",
+    "help": "Help ❓",
+    "exit_menu": "🚪 Exit",
+    "regen_photo": "🔄 Different photo",
+    "photo_updated": "Photo updated!",
+    "no_photo": "No other photo found"
+  },
+  "errors": {
+    "gen_error": "Generation error",
+    "regen_err": "Error"
+  },
+  "webapp": {
+    "result": "🎮 Result: {score} points!\n📚 Words reviewed: {count}",
+    "new_record": "\n🏆 New record! (Previous: {old})"
+  }
+}

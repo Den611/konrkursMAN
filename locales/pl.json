@@ -1,0 +1,227 @@
+{
+  "meta": {
+    "name": "Polski",
+    "code": "pl",
+    "flag": "🇵🇱"
+  },
+  "lang_select": "🌍 Оберіть мову інтерфейсу\nChoose interface language\nWybierz język interfejsu:",
+  "lang_changed": "✅ Język zmieniony na Polski 🇵🇱",
+  "lang_command_hint": "🌍 Zmień język interfejsu:",
+  "start": {
+    "welcome_new": "🚀 <b>Witaj w WordBot — Twoim osobistym korepetytorze AI!</b>\n\nAnalizuję Twój typ percepcji i zainteresowania, aby generować skojarzenia i przykłady <i>skrojone pod Ciebie</i>.\n\n🧠 <b>Przejdź krótki test (4 pytania) — nauka stanie się skuteczniejsza!</b>",
+    "welcome_back": "👋 Witaj z powrotem! Kontynuujemy naukę?"
+  },
+  "style_test": [
+    {
+      "question": "📖 <b>Pytanie 1 / 4</b>\nJak zazwyczaj zapamiętujesz nowe słowo?",
+      "options": [
+        "👁 Wyobrażam sobie obrazek lub skojarzenie",
+        "👂 Wymawiam je głośno kilka razy",
+        "⚙️ Szukam logiki, rdzenia lub reguły",
+        "🖐 Od razu piszę zdanie i używam go"
+      ]
+    },
+    {
+      "question": "🎬 <b>Pytanie 2 / 4</b>\nJaki format nauki jest Ci najbliższy?",
+      "options": [
+        "👁 Lekcje wideo ze schematami i napisami",
+        "👂 Podcasty lub audiobooki",
+        "⚙️ Podręczniki z przejrzystymi tabelami",
+        "🖐 Rozmowy na żywo i ćwiczenia praktyczne"
+      ]
+    },
+    {
+      "question": "🤔 <b>Pytanie 3 / 4</b>\nKiedy utkniesz na nowym materiale — co robisz?",
+      "options": [
+        "👁 Rysuję schemat lub szukam ilustracji",
+        "👂 Tłumaczę sobie głośno lub słucham jeszcze raz",
+        "⚙️ Analizuję krok po kroku według reguł",
+        "🖐 Próbuję zastosować i uczę się na błędach"
+      ]
+    },
+    {
+      "question": "🧩 <b>Pytanie 4 / 4</b>\nJak wygląda Twój idealny trening słówek?",
+      "options": [
+        "👁 Karty z kolorowymi obrazkami",
+        "👂 Wymawiam słowo i słyszę poprawną wymowę",
+        "⚙️ Porównuję tłumaczenia i transkrypcje",
+        "🖐 Mini-gra na szybkość lub tłumaczenie"
+      ]
+    }
+  ],
+  "style": {
+    "visual": {
+      "name": "Wzrokowiec",
+      "desc": "🖼 <b>Wzrokowiec</b> — zapamiętujesz przez obrazy.\nBędę dodawać obrazki i wyraziste skojarzenia do każdego słowa."
+    },
+    "audial": {
+      "name": "Słuchowiec",
+      "desc": "🎧 <b>Słuchowiec</b> — lepiej przyswajasz przez dźwięk.\nBędę podkreślać transkrypcję i poprawną wymowę."
+    },
+    "logic": {
+      "name": "Logik",
+      "desc": "🧩 <b>Logik</b> — ważna jest dla Ciebie struktura.\nBędę dawać szczegółowe wyjaśnienia z regułami i analizą."
+    },
+    "practice": {
+      "name": "Praktyk",
+      "desc": "🎮 <b>Praktyk</b> — uczysz się przez działanie.\nCzęściej będę proponować gry i zadania praktyczne."
+    }
+  },
+  "style_result": "✅ <b>Wynik testu:</b>\n{desc}\n\n📊 Rozkład punktów: {score_line}\n\n🎯 <b>Teraz wybierz swoją kategorię zainteresowań:</b>",
+  "hobby_categories": [
+    {
+      "id": "games",
+      "label": "🎮 Gry i technologie",
+      "keywords": "gry, programowanie, technologia, esport"
+    },
+    {
+      "id": "sport",
+      "label": "⚽ Sport i fitness",
+      "keywords": "sport, fitness, piłka nożna, pływanie, boks"
+    },
+    {
+      "id": "art",
+      "label": "🎵 Muzyka i sztuka",
+      "keywords": "muzyka, rysunek, kino, fotografia, taniec"
+    },
+    {
+      "id": "science",
+      "label": "📚 Nauka i książki",
+      "keywords": "czytanie, nauka, matematyka, historia, biologia"
+    },
+    {
+      "id": "travel",
+      "label": "✈️ Podróże i przyroda",
+      "keywords": "podróże, przyroda, turystyka, zwierzęta"
+    },
+    {
+      "id": "food",
+      "label": "🍕 Gotowanie i styl",
+      "keywords": "gotowanie, moda, design, uroda"
+    },
+    {
+      "id": "other",
+      "label": "✏️ Inne",
+      "keywords": null
+    }
+  ],
+  "hobby": {
+    "done_btn": "✔️ Gotowe",
+    "at_least_one": "Wybierz co najmniej jedną kategorię 👇",
+    "choose_from_btns": "Wybierz kategorię z przycisków 👇",
+    "selected_hint": "Wybrano ({count}): <b>{names}</b>\nDodaj więcej lub naciśnij <b>✔️ Gotowe</b>",
+    "no_selection": "Wybierz swoje kategorie zainteresowań (można kilka) 👇",
+    "custom_prompt": "{prev}✏️ Napisz swoje hobby (np.: <i>anime, skateboard, astronomia</i>):",
+    "custom_prev": "Już wybrano: <b>{hobby_so_far}</b>\n\n",
+    "custom_too_short": "Napisz chociaż jedno hobby 😊"
+  },
+  "reg_done": "🎉 <b>Profil skonfigurowany!</b>\n\n🧠 Typ percepcji: <b>{style}</b>\n🎯 Zainteresowania: <b>{interests}</b>\n\nAI będzie generować skojarzenia i przykłady <i>wyłącznie w Twoim stylu</i>.\nNaciśnij /help, aby poznać wszystkie komendy 👇",
+  "help": {
+    "title": "📚 <b>Jak działa Twój inteligentny słownik?</b>\n\n➕ <b>/add_word</b> — Dodaj słowo. AI samo znajdzie obrazek i stworzy skojarzenie.\n🎯 <b>/practice</b> — Trening. Algorytm SuperMemo-2 oblicza, kiedy zaczniesz zapominać słowo.\n🌟 <b>/word_of_day</b> — AI generuje dla Ciebie losowe przydatne słowo na Twoim poziomie.\n🤖 <b>/AI</b> — Wpisz niezrozumiałe słowo, a wyjaśnię je na przykładach z Twoich hobby!\n🎮 <b>Graj w słowa</b> — Otworzy mini-grę bezpośrednio w Telegramie. Zdobywaj punkty!\n🏆 <b>TOP Gracze</b> — Sprawdź, na którym jesteś miejscu wśród wszystkich uczniów.",
+    "commands_list": "Dostępne komendy:\n➕ /add_word – dodaj słowo\n🎯 /practice – trening pamięci\n📊 /stats – Twoje statystyki\n🏆 /top – tabela liderów\n🌟 /word_of_day – słowo dnia\n🤖 /AI – wyjaśnienie od AI\n📝 /all_words – Twój słownik\n📥 /import_words – masowe wczytywanie\n❌ /delete_word – usuń słowo\n💬 /feedback – wyślij opinię\n 🌍 /language – język interfejsu\n❓ /help – informacje\n🚪 /exit – wyjście"
+  },
+  "stats": {
+    "title": "📊 <b>Twój Profil</b>",
+    "style_label": "👤 Typ ucznia:",
+    "hobby_label": "🎯 Hobby:",
+    "level_label": "🏆 Poziom:",
+    "xp_label": "⭐ Doświadczenie:",
+    "words_label": "📚 Zapisanych słów:",
+    "record_label": "🎮 Rekord w mini-grze:",
+    "points": " punktów",
+    "no_style": "Nieokreślony",
+    "no_hobby": "Nie podano",
+    "lang_level": "🎓 Мовний рівень:",
+    "words_due": "⏰ Потребують повторення:",
+    "words_mastered": "✅ Засвоєно:"
+  },
+  "top": {
+    "title": "🏆 <b>TABELA LIDERÓW (Mini-gra)</b> 🏆\n\n",
+    "empty": "Nikt jeszcze nie grał w mini-grę. Bądź pierwszy!",
+    "anon": "Tajemniczy uczeń",
+    "points": " punktów",
+    "footer": "\n<i>Graj w Web App, aby wspiąć się w rankingu!</i>"
+  },
+  "exit": {
+    "done": "🚪 Wyszedłeś z aktualnego trybu.\n\n{commands}"
+  },
+  "add_word": {
+    "enter_word": "✏️ Wpisz słowo do dodania:",
+    "choose_lang": "🌍 Wybierz język:",
+    "autotrans": "🔍 Automatyczne tłumaczenie: <b>{translation}</b>\nNaciśnij przycisk lub wpisz własne:",
+    "save_btn": "Zapisz: {translation}",
+    "saving": "⏳ Zapisuję, szukam obrazka i skojarzenia...",
+    "added": "✅ <b>Dodano:</b> {word} {transcription} — {translation}\n🧠 <i>{association}</i>",
+    "already_exists": "⚠️ Słowo już jest w słowniku.",
+    "continue": "👇 Kontynuuj:"
+  },
+  "word_of_day": {
+    "choose_lang": "🌟 Wybierz język dla nowego słowa:",
+    "generating": "⏳ Generuję słowo ({lang})...",
+    "result": "🌟 Słowo dnia: <b>{word}</b> {transcription}\n🇺🇦 Tłumaczenie: {translation}",
+    "actions": "Akcje:",
+    "add_btn": "➕ Dodaj to słowo",
+    "added": "✅ Dodano!\n🧠 {association}",
+    "already": "⚠️ Już jest.",
+    "ai_confused": "⚠️ AI się trochę pogubił:\n{result}\n\nSpróbuj jeszcze raz!"
+  },
+  "practice": {
+    "all_done": "🎉 Na dziś wszystkie słowa powtórzone!",
+    "words_today": "🎯 Słów na dziś: {count}\nWybierz język:",
+    "all_langs_btn": "Wszystkie języki",
+    "empty_lang": "Brak słów.",
+    "question": "✏️ Przetłumacz: <b>{translation}</b> ({lang})",
+    "correct": "✅ Dobrze! {word}",
+    "wrong": "❌ Nie. Poprawnie: {word} {transcription}\n💡 {association}",
+    "finished": "🏁 Trening zakończony!",
+    "sm2_hint": "⏱ Інтервал: {interval} дн. | Складність: {ef}",
+    "streak_msg": "🔥 Серія: {streak} днів поспіль!",
+    "streak_achievement": "🏅 Досягнення: {streak}-денна серія!",
+    "summary_level": "📈 Рівень: {level}",
+    "summary_streak": "🔥 Серія: {streak} дн."
+  },
+  "ai": {
+    "enter_word": "🤖 Wpisz słowo do wyjaśnienia (lub /exit):",
+    "choose_lang": "🌍 Język słowa?",
+    "thinking": "⏳ 🤖 AI analizuje słowo i dobiera przykłady...",
+    "result_prefix": "🤖 <b>Oto wyjaśnienie:</b>\n\n",
+    "ask_next": "🤖 Jeszcze jedno słowo? (lub /exit)"
+  },
+  "delete": {
+    "enter_word": "🗑️ Wpisz słowo do usunięcia:",
+    "done": "🗑️ Gotowe."
+  },
+  "all_words": {
+    "empty": "📭 Twój słownik jest pusty.",
+    "title": "📝 Słowa:\n",
+    "row": "{word} — {translation}"
+  },
+  "import": {
+    "instructions": "📥 Wyślij plik .txt lub .csv. Format: słowo - tłumaczenie - język",
+    "processing": "⏳ Przetwarzam słownik...",
+    "done": "✅ Zaimportowano {count} słów!",
+    "error": "❌ Błąd: {error}"
+  },
+  "feedback": {
+    "prompt": "💬 Napisz swoją opinię lub pomysł (lub /exit):",
+    "thanks": "✅ Dziękujemy za opinię!"
+  },
+  "btn": {
+    "play_webapp": "🎮 Graj w słowa (Web App)",
+    "top": "🏆 TOP Gracze",
+    "feedback": "Opinia 💬",
+    "help": "Pomoc ❓",
+    "exit_menu": "🚪 Wyjście",
+    "regen_photo": "🔄 Inne zdjęcie",
+    "photo_updated": "Zdjęcie zaktualizowane!",
+    "no_photo": "Nie znaleziono innego zdjęcia"
+  },
+  "errors": {
+    "gen_error": "Błąd generacji",
+    "regen_err": "Błąd"
+  },
+  "webapp": {
+    "result": "🎮 Wynik: {score} punktów!\n📚 Powtórzonych słów: {count}",
+    "new_record": "\n🏆 Nowy rekord! (Było: {old})"
+  }
+}
