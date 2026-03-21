@@ -131,9 +131,9 @@
     "points": " punktów",
     "no_style": "Nieokreślony",
     "no_hobby": "Nie podano",
-    "lang_level": "🎓 Мовний рівень:",
-    "words_due": "⏰ Потребують повторення:",
-    "words_mastered": "✅ Засвоєно:"
+    "lang_level": "🎓 Poziom językowy:",
+    "words_due": "⏰ Do powtórzenia:",
+    "words_mastered": "✅ Opanowane:"
   },
   "top": {
     "title": "🏆 <b>TABELA LIDERÓW (Mini-gra)</b> 🏆\n\n",
@@ -174,12 +174,11 @@
     "correct": "✅ Dobrze! {word}",
     "wrong": "❌ Nie. Poprawnie: {word} {transcription}\n💡 {association}",
     "finished": "🏁 Trening zakończony!",
-    "sm2_hint": "⏱ Інтервал: {interval} дн. | Складність: {ef}",
-    "streak_msg": "🔥 Серія: {streak} днів поспіль!",
-    "streak_achievement": "🏅 Досягнення: {streak}-денна серія!",
-    "summary_level": "📈 Рівень: {level}",
-    "summary_streak": "🔥 Серія: {streak} дн."
-  },
+    "sm2_hint": "⏱ Interwał: {interval} dni | Trudność: {ef}",
+    "streak_msg": "🔥 Seria: {streak} dni z rzędu!",
+    "streak_achievement": "🏅 Osiągnięcie: {streak}-dniowa seria!",
+    "summary_level": "📈 Poziom: {level}",
+    "summary_streak": "🔥 Seria: {streak} dni"  },
   "ai": {
     "enter_word": "🤖 Wpisz słowo do wyjaśnienia (lub /exit):",
     "choose_lang": "🌍 Język słowa?",
