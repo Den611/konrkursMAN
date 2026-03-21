@@ -1,3 +1,14 @@
+"""
+i18n.py — система локалізації для WordBot
+=========================================
+Використання:
+    from i18n import t, get_user_lang, set_user_lang
+
+    lang = get_user_lang(user_id)        # → 'uk' / 'pl' / 'en'
+    text = t(lang, "add_word.enter_word")
+    text = t(lang, "hobby.selected_hint", count=3, names="Ігри, Спорт")
+"""
+
 import json
 import os
 from functools import lru_cache
@@ -33,6 +44,14 @@ def _load_locale(lang: str) -> dict:
 # ---------- Основна функція перекладу ----------
 
 def t(lang: str, key: str, **kwargs) -> str:
+    """
+    Повернути локалізований рядок за точковим ключем.
+
+    Приклади:
+        t("uk", "start.welcome_back")
+        t("pl", "hobby.selected_hint", count=2, names="Gry, Sport")
+        t("en", "add_word.save_btn", translation="Apple")
+    """
     data = _load_locale(lang)
     parts = key.split(".")
     val: object = data
@@ -124,9 +143,11 @@ def get_style_display(lang: str, style_raw: str) -> str:
 STYLE_ORDER = ["visual", "audial", "logic", "practice"]
 
 
-def score_answer(text: str | None, options: list[str]) -> str | None:
-    if not text:
-        return None
+def score_answer(text: str, options: list[str]) -> str | None:
+    """
+    Визначити внутрішній ключ стилю за текстом відповіді.
+    options — список рядків з locale['style_test'][q_idx]['options']
+    """
     for i, opt in enumerate(options):
         if text.strip() == opt.strip():
             return STYLE_ORDER[i]

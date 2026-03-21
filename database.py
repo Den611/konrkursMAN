@@ -135,7 +135,9 @@ async def init_db():
         ("hobbies", "TEXT"), 
         ("learning_style", "TEXT DEFAULT 'Універсал'"),
         ("streak_days", "INTEGER DEFAULT 0"),
-        ("interface_lang", "TEXT DEFAULT 'uk'"), 
+        ("interface_lang", "TEXT DEFAULT 'uk'"),
+        ("interface_lang", "TEXT DEFAULT 'uk'"),
+        ("target_lang",    "TEXT DEFAULT 'English'"),
     ]
     for col, dtype in columns_users:
         try:
@@ -276,3 +278,248 @@ async def set_user_lang(user_id, lang: str):
         "UPDATE users SET interface_lang=$1 WHERE user_id=$2", lang, user_id
     )
  
+
+async def update_streak(user_id):
+    row = await db_fetchrow(
+        "SELECT last_active, streak_days FROM users WHERE user_id=$1", user_id
+    )
+    if not row:
+        return 1, False
+
+    today     = datetime.now().date()
+    streak    = row['streak_days'] or 0
+    last_raw  = row['last_active']
+
+    if last_raw:
+        try:
+            last_date = datetime.fromisoformat(last_raw).date()
+        except Exception:
+            last_date = None
+    else:
+        last_date = None
+
+    if last_date == today:
+        # Вже заходив сьогодні — нічого не міняємо
+        return streak, False
+
+    if last_date == today - timedelta(days=1):
+        # Вчора заходив — продовжуємо серію
+        streak += 1
+    else:
+        # Пропустив хоча б один день — скидаємо
+        streak = 1
+
+    await db_execute(
+        "UPDATE users SET streak_days=$1, last_active=$2 WHERE user_id=$3",
+        streak, datetime.now().isoformat(), user_id
+    )
+    return streak, True
+
+
+async def update_word_progress_sm2(user_id, word, quality: int):
+    """
+      5 — ідеальна відповідь
+      4 — правильна з невеликим зусиллям
+      3 — правильна але важко
+      2 — неправильна, але відповідь була близькою
+      1 — неправильна, пам'ятав але не згадав
+      0 — повний провал
+    """
+    res = await db_fetchrow(
+        "SELECT interval, ease_factor FROM user_words WHERE user_id=$1 AND word=$2",
+        user_id, word
+    )
+    if not res:
+        return
+
+    interval    = res['interval']    or 1
+    ease_factor = res['ease_factor'] or 2.5
+
+    if quality >= 3:
+        # Правильна відповідь — SuperMemo-2 формула
+        if interval == 0:
+            interval = 1
+        elif interval == 1:
+            interval = 6
+        else:
+            interval = round(interval * ease_factor)
+
+        # Оновлення ease_factor (не нижче 1.3)
+        ease_factor = max(1.3, round(
+            ease_factor + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02), 2
+        ))
+        usage_add = 1
+    else:
+        # Неправильна — скинути інтервал
+        interval    = 1
+        ease_factor = max(1.3, round(ease_factor - 0.2, 2))
+        usage_add   = 0
+
+    next_date = (datetime.now() + timedelta(days=interval)).isoformat()
+    await db_execute(
+        """UPDATE user_words
+           SET usage_count=usage_count+$1, interval=$2, ease_factor=$3, next_review_date=$4
+           WHERE user_id=$5 AND word=$6""",
+        usage_add, interval, ease_factor, next_date, user_id, word
+    )
+
+
+async def get_weak_words(user_id, limit=10):
+    """Слова з найнижчим ease_factor — найважчі для юзера."""
+    return await db_fetch(
+        """SELECT word, translation, language, ease_factor, usage_count
+           FROM user_words
+           WHERE user_id=$1
+           ORDER BY ease_factor ASC, usage_count ASC
+           LIMIT $2""",
+        user_id, limit
+    )
+
+
+async def get_word_stats(user_id):
+    """Загальна статистика слів для /stats."""
+    total  = await db_fetchval("SELECT COUNT(*) FROM user_words WHERE user_id=$1", user_id)
+    due    = await db_fetchval(
+        "SELECT COUNT(*) FROM user_words WHERE user_id=$1 AND (next_review_date IS NULL OR next_review_date <= $2)",
+        user_id, datetime.now().isoformat()
+    )
+    mastered = await db_fetchval(
+        "SELECT COUNT(*) FROM user_words WHERE user_id=$1 AND ease_factor >= 2.8 AND interval >= 21",
+        user_id
+    )
+    return {
+        "total":    total    or 0,
+        "due":      due      or 0,
+        "mastered": mastered or 0,
+    }
+
+
+async def get_user_full_profile(user_id):
+    """Повний профіль для /stats."""
+    return await db_fetchrow(
+        "SELECT learning_style, hobbies, best_score, level, streak_days, last_active FROM users WHERE user_id=$1",
+        user_id
+    )
+
+
+async def update_user_level(user_id, total_xp):
+    """Оновити рівень A1–C1 за кількістю XP."""
+    if total_xp < 50:
+        level = "A1"
+    elif total_xp < 150:
+        level = "A2"
+    elif total_xp < 350:
+        level = "B1"
+    elif total_xp < 700:
+        level = "B2"
+    else:
+        level = "C1"
+    await db_execute("UPDATE users SET level=$1 WHERE user_id=$2", level, user_id)
+    return level
+
+async def get_target_lang(user_id):
+    val = await db_fetchval(
+        "SELECT target_lang FROM users WHERE user_id=$1", user_id
+    )
+    return val or "English"
+
+
+async def set_target_lang(user_id, lang: str):
+    await db_execute(
+        "UPDATE users SET target_lang=$1 WHERE user_id=$2", lang, user_id
+    )
+
+
+async def get_user_lang(user_id):
+    return await db_fetchval(
+        "SELECT interface_lang FROM users WHERE user_id=$1", user_id
+    )
+
+
+async def set_user_lang(user_id, lang: str):
+    await db_execute(
+        "UPDATE users SET interface_lang=$1 WHERE user_id=$2", lang, user_id
+    )
+
+
+async def get_user_full_profile(user_id):
+    return await db_fetchrow(
+        "SELECT learning_style, hobbies, best_score, level, streak_days, last_active FROM users WHERE user_id=$1",
+        user_id
+    )
+
+
+async def get_word_stats(user_id):
+    total = await db_fetchval("SELECT COUNT(*) FROM user_words WHERE user_id=$1", user_id)
+    due   = await db_fetchval(
+        "SELECT COUNT(*) FROM user_words WHERE user_id=$1 AND (next_review_date IS NULL OR next_review_date <= $2)",
+        user_id, datetime.now().isoformat()
+    )
+    mastered = await db_fetchval(
+        "SELECT COUNT(*) FROM user_words WHERE user_id=$1 AND ease_factor >= 2.8 AND interval >= 21",
+        user_id
+    )
+    return {"total": total or 0, "due": due or 0, "mastered": mastered or 0}
+
+
+async def get_weak_words(user_id, limit=10):
+    return await db_fetch(
+        """SELECT word, translation, language, ease_factor, usage_count
+           FROM user_words WHERE user_id=$1
+           ORDER BY ease_factor ASC, usage_count ASC LIMIT $2""",
+        user_id, limit
+    )
+
+
+async def update_streak(user_id):
+    row = await db_fetchrow(
+        "SELECT last_active, streak_days FROM users WHERE user_id=$1", user_id
+    )
+    if not row:
+        return 1, False
+    today    = datetime.now().date()
+    streak   = row['streak_days'] or 0
+    last_raw = row['last_active']
+    try:
+        last_date = datetime.fromisoformat(last_raw).date() if last_raw else None
+    except Exception:
+        last_date = None
+    if last_date == today:
+        return streak, False
+    streak = streak + 1 if last_date == today - timedelta(days=1) else 1
+    await db_execute(
+        "UPDATE users SET streak_days=$1, last_active=$2 WHERE user_id=$3",
+        streak, datetime.now().isoformat(), user_id
+    )
+    return streak, True
+
+
+async def update_word_progress_sm2(user_id, word, quality: int):
+    res = await db_fetchrow(
+        "SELECT interval, ease_factor FROM user_words WHERE user_id=$1 AND word=$2",
+        user_id, word
+    )
+    if not res:
+        return
+    interval    = res['interval']    or 1
+    ease_factor = res['ease_factor'] or 2.5
+    if quality >= 3:
+        interval    = 1 if interval == 0 else (6 if interval == 1 else round(interval * ease_factor))
+        ease_factor = max(1.3, round(ease_factor + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02), 2))
+        usage_add   = 1
+    else:
+        interval    = 1
+        ease_factor = max(1.3, round(ease_factor - 0.2, 2))
+        usage_add   = 0
+    next_date = (datetime.now() + timedelta(days=interval)).isoformat()
+    await db_execute(
+        "UPDATE user_words SET usage_count=usage_count+$1, interval=$2, ease_factor=$3, next_review_date=$4 WHERE user_id=$5 AND word=$6",
+        usage_add, interval, ease_factor, next_date, user_id, word
+    )
+
+
+async def update_user_level(user_id, total_xp):
+    level = ("A1" if total_xp < 50 else "A2" if total_xp < 150 else
+             "B1" if total_xp < 350 else "B2" if total_xp < 700 else "C1")
+    await db_execute("UPDATE users SET level=$1 WHERE user_id=$2", level, user_id)
+    return level
