@@ -124,6 +124,7 @@
     "title": "📊 <b>Twój Profil</b>",
     "style_label": "👤 Typ ucznia:",
     "hobby_label": "🎯 Hobby:",
+    "studying": "🌍 Uczę się:",
     "level_label": "🏆 Poziom:",
     "xp_label": "⭐ Doświadczenie:",
     "words_label": "📚 Zapisanych słów:",
@@ -222,5 +223,10 @@
   "webapp": {
     "result": "🎮 Wynik: {score} punktów!\n📚 Powtórzonych słów: {count}",
     "new_record": "\n🏆 Nowy rekord! (Było: {old})"
+  },
+  "weak": {
+    "title": "Najtrudniejsze słowa (najniższy ease factor):",
+    "repetitions": "powtórzeń",
+    "footer": "Te słowa otrzymują krótszy interwał w SuperMemo-2"
   }
 }

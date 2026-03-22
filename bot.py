@@ -4,6 +4,7 @@ import json
 import urllib.parse
 import io
 import html
+import re
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.filters import Command
@@ -12,35 +13,27 @@ from aiogram.fsm.state import State, StatesGroup
 from cachetools import TTLCache
 from deep_translator import GoogleTranslator
 from typing import Callable, Dict, Any, Awaitable
-
 from config import BOT_TOKEN, WEB_APP_URL
 import ai_manager
 import database as db
 import i18n
-
+ 
 bot = Bot(token=BOT_TOKEN)
 dp  = Dispatcher()
-
-# Мови які можна ВИВЧАТИ 
+ 
 SUPPORTED_LANGUAGES = ["English", "German", "French", "Polish", "Spanish", "Italian", "Ukrainian"]
-
-# Маппінг: код інтерфейсу -> код для GoogleTranslator
-LANG_TO_TRANSLATOR = {"uk": "uk", "pl": "pl", "en": "en"}
-
-# Назва мови інтерфейсу для AI-промптів
-LANG_TO_NAME = {"uk": "Ukrainian", "pl": "Polish", "en": "English"}
-
-# Яку мову прибрати зі списку вивчення
-LANG_TO_EXCLUDE = {"uk": None, "pl": "Polish", "en": "English"}
-
-
+LANG_TO_TRANSLATOR  = {"uk": "uk", "pl": "pl", "en": "en"}
+LANG_TO_NAME        = {"uk": "Ukrainian", "pl": "Polish", "en": "English"}
+LANG_TO_EXCLUDE     = {"uk": None, "pl": "Polish", "en": "English"}
+ 
+ 
 # ─────────────────────────────────────────
 # MIDDLEWARE
 # ─────────────────────────────────────────
 class ThrottlingMiddleware(BaseMiddleware):
     def __init__(self, throttle_time: int = 1):
         self.cache = TTLCache(maxsize=10000, ttl=throttle_time)
-
+ 
     async def __call__(self, handler: Callable[[types.Message, Dict[str, Any]], Awaitable[Any]],
                        event: types.Message, data: Dict[str, Any]) -> Any:
         user_id = event.from_user.id
@@ -48,8 +41,8 @@ class ThrottlingMiddleware(BaseMiddleware):
             return
         self.cache[user_id] = True
         return await handler(event, data)
-
-
+ 
+ 
 class LangMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: types.Message, data: Dict[str, Any]) -> Any:
         user_id = event.from_user.id
@@ -58,33 +51,32 @@ class LangMiddleware(BaseMiddleware):
             if lang_db:
                 i18n.set_user_lang(user_id, lang_db)
         return await handler(event, data)
-
-
+ 
+ 
 dp.message.middleware(ThrottlingMiddleware(1))
 dp.message.middleware(LangMiddleware())
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # СКОРОЧЕННЯ
 # ─────────────────────────────────────────
 def ul(user_id: int, key: str, **kwargs) -> str:
     return i18n.t(i18n.get_user_lang(user_id), key, **kwargs)
-
+ 
 def ulang(user_id: int) -> str:
     return i18n.get_user_lang(user_id)
-
+ 
 def trans_lang(user_id: int) -> str:
     return LANG_TO_TRANSLATOR.get(ulang(user_id), "uk")
-
+ 
 def ai_lang_name(user_id: int) -> str:
     return LANG_TO_NAME.get(ulang(user_id), "Ukrainian")
-
+ 
 def study_langs(user_id: int) -> list:
-    """Список мов для вивчення без мови інтерфейсу."""
     exclude = LANG_TO_EXCLUDE.get(ulang(user_id))
     return [l for l in SUPPORTED_LANGUAGES if l != exclude]
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # FSM СТАНИ
 # ─────────────────────────────────────────
@@ -95,33 +87,30 @@ class Registration(StatesGroup):
     q4             = State()
     hobby_category = State()
     hobby_custom   = State()
-
+ 
 class AddWord(StatesGroup):
     waiting_for_word        = State()
     waiting_for_language    = State()
     waiting_for_translation = State()
-
+ 
 class DeleteWord(StatesGroup):
     waiting_for_word = State()
-
+ 
 class PracticeWord(StatesGroup):
     waiting_for_language = State()
     waiting_for_answer   = State()
-
+ 
 class AIHelper(StatesGroup):
     waiting_for_prompt = State()
-
+ 
 class WordOfDayState(StatesGroup):
     waiting_for_language = State()
     waiting_for_action   = State()
-
+ 
 class FeedbackState(StatesGroup):
     waiting_for_message = State()
-
-class ChangeLang(StatesGroup):
-    waiting = State()
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # КЛАВІАТУРИ
 # ─────────────────────────────────────────
@@ -130,8 +119,8 @@ def _style_keyboard(options: list) -> types.ReplyKeyboardMarkup:
         keyboard=[[types.KeyboardButton(text=opt)] for opt in options],
         resize_keyboard=True, one_time_keyboard=True
     )
-
-
+ 
+ 
 def _hobby_keyboard(lang: str, selected_ids: list) -> types.ReplyKeyboardMarkup:
     cats     = i18n.get_list(lang, "hobby_categories")
     done_btn = i18n.t(lang, "hobby.done_btn")
@@ -142,16 +131,16 @@ def _hobby_keyboard(lang: str, selected_ids: list) -> types.ReplyKeyboardMarkup:
     if selected_ids:
         keyboard.append([types.KeyboardButton(text=done_btn)])
     return types.ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
-
-
+ 
+ 
 def _study_lang_keyboard(user_id: int) -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
         keyboard=[[types.KeyboardButton(text=l)] for l in study_langs(user_id)] +
                  [[types.KeyboardButton(text="/exit")]],
         resize_keyboard=True, one_time_keyboard=True
     )
-
-
+ 
+ 
 def _lang_select_keyboard() -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(
@@ -159,14 +148,14 @@ def _lang_select_keyboard() -> types.InlineKeyboardMarkup:
         )]
         for code, (name, flag) in i18n.SUPPORTED_UI_LANGS.items()
     ])
-
-
+ 
+ 
 def _find_cat_by_label(lang: str, text: str) -> dict | None:
     clean = text.replace("✅ ", "").strip()
     cats  = i18n.get_list(lang, "hobby_categories")
     return next((c for c in cats if c["label"] == clean), None)
-
-
+ 
+ 
 async def get_main_kb(user_id: int) -> types.ReplyKeyboardMarkup:
     lang       = ulang(user_id)
     words_raw  = await db.get_user_words(user_id)
@@ -180,12 +169,13 @@ async def get_main_kb(user_id: int) -> types.ReplyKeyboardMarkup:
         [types.KeyboardButton(text="/all_words"),    types.KeyboardButton(text="/stats")],
         [types.KeyboardButton(text="/word_of_day"),  types.KeyboardButton(text=i18n.t(lang, "btn.top"))],
         [types.KeyboardButton(text="/import_words"), types.KeyboardButton(text="🤖 /AI")],
-        [types.KeyboardButton(text=i18n.t(lang, "btn.feedback")), types.KeyboardButton(text=i18n.t(lang, "btn.help"))],
-        [types.KeyboardButton(text="/weak"),],
+        [types.KeyboardButton(text=i18n.t(lang, "btn.feedback")),
+         types.KeyboardButton(text=i18n.t(lang, "btn.help"))],
+        [types.KeyboardButton(text="/weak")],
         [types.KeyboardButton(text="/exit")],
     ], resize_keyboard=True)
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # ДОПОМІЖНІ ФУНКЦІЇ
 # ─────────────────────────────────────────
@@ -198,33 +188,33 @@ async def get_user_level_info(user_id: int):
         level     += 1
         xp_needed += 10
     return level, total_xp, xp_needed
-
-
+ 
+ 
 async def _update_progress(user_id: int):
     words    = await db.get_user_words(user_id)
     total_xp = sum(w['usage_count'] for w in words)
     level    = await db.update_user_level(user_id, total_xp)
     streak, is_new_day = await db.update_streak(user_id)
     return level, streak, is_new_day
-
-
+ 
+ 
 def _build_keyword_str(lang: str, selected_ids: list, custom: str = None) -> str:
     cats_data = i18n.get_list(lang, "hobby_categories")
     parts = [c["keywords"] for c in cats_data if c["id"] in selected_ids and c["keywords"]]
     if custom:
         parts.append(custom)
     return ", ".join(parts) if parts else "повсякденне життя"
-
-
+ 
+ 
 # ─────────────────────────────────────────
-# /language — мова інтерфейсу
+# /language
 # ─────────────────────────────────────────
 @dp.message(Command("language"))
 async def cmd_language(message: types.Message):
     await message.answer(i18n.t("uk", "lang_select"),
                          reply_markup=_lang_select_keyboard())
-
-
+ 
+ 
 @dp.callback_query(F.data.startswith("setlang:"))
 async def callback_set_lang(callback: types.CallbackQuery, state: FSMContext):
     lang_code = callback.data.split(":")[1]
@@ -248,10 +238,8 @@ async def callback_set_lang(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.answer(i18n.t(lang_code, "lang_command_hint"),
                                       reply_markup=await get_main_kb(user_id))
     await callback.answer()
-
-
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # /start
 # ─────────────────────────────────────────
@@ -271,8 +259,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
         await state.clear()
         await message.answer(ul(user_id, "start.welcome_back"),
                              reply_markup=await get_main_kb(user_id))
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # РЕЄСТРАЦІЯ
 # ─────────────────────────────────────────
@@ -280,8 +268,8 @@ async def _ask_style_q(message, lang: str, q_idx: int):
     q = i18n.get_list(lang, "style_test")[q_idx]
     await message.answer(q["question"], parse_mode="HTML",
                          reply_markup=_style_keyboard(q["options"]))
-
-
+ 
+ 
 async def _handle_style_q(message, state, q_idx: int, next_state):
     if not message.text:
         return
@@ -295,20 +283,20 @@ async def _handle_style_q(message, state, q_idx: int, next_state):
     await state.update_data(scores=scores)
     await state.set_state(next_state)
     await _ask_style_q(message, lang, q_idx + 1)
-
-
+ 
+ 
 @dp.message(Registration.q1)
 async def reg_q1(message: types.Message, state: FSMContext):
     await _handle_style_q(message, state, 0, Registration.q2)
-
+ 
 @dp.message(Registration.q2)
 async def reg_q2(message: types.Message, state: FSMContext):
     await _handle_style_q(message, state, 1, Registration.q3)
-
+ 
 @dp.message(Registration.q3)
 async def reg_q3(message: types.Message, state: FSMContext):
     await _handle_style_q(message, state, 2, Registration.q4)
-
+ 
 @dp.message(Registration.q4)
 async def reg_q4(message: types.Message, state: FSMContext):
     if not message.text:
@@ -327,8 +315,8 @@ async def reg_q4(message: types.Message, state: FSMContext):
     style_desc = i18n.t(lang, f"style.{final_style}.desc")
     await message.answer(i18n.t(lang, "style_result", desc=style_desc, score_line=score_line),
                          parse_mode="HTML", reply_markup=_hobby_keyboard(lang, []))
-
-
+ 
+ 
 @dp.message(Registration.hobby_category)
 async def reg_hobby_category(message: types.Message, state: FSMContext):
     if not message.text:
@@ -338,7 +326,7 @@ async def reg_hobby_category(message: types.Message, state: FSMContext):
     selected = data.get("selected_hobbies", [])
     text     = message.text.strip()
     done_btn = i18n.t(lang, "hobby.done_btn")
-
+ 
     if text == done_btn:
         if not selected:
             await message.answer(i18n.t(lang, "hobby.at_least_one"),
@@ -355,7 +343,7 @@ async def reg_hobby_category(message: types.Message, state: FSMContext):
         else:
             await _finish_registration(message, state, selected)
         return
-
+ 
     cat = _find_cat_by_label(lang, text)
     if not cat:
         await message.answer(i18n.t(lang, "hobby.choose_from_btns"),
@@ -374,8 +362,8 @@ async def reg_hobby_category(message: types.Message, state: FSMContext):
         names = [c["label"].split(" ", 1)[1] for c in cats_data if c["id"] in selected]
         hint  = i18n.t(lang, "hobby.selected_hint", count=count, names=", ".join(names))
     await message.answer(hint, parse_mode="HTML", reply_markup=_hobby_keyboard(lang, selected))
-
-
+ 
+ 
 @dp.message(Registration.hobby_custom)
 async def reg_hobby_custom(message: types.Message, state: FSMContext):
     if not message.text:
@@ -387,8 +375,8 @@ async def reg_hobby_custom(message: types.Message, state: FSMContext):
     data     = await state.get_data()
     selected = data.get("selected_hobbies", [])
     await _finish_registration(message, state, selected, custom=message.text.strip())
-
-
+ 
+ 
 async def _finish_registration(message, state, selected: list, custom: str = None):
     uid         = message.from_user.id
     lang        = ulang(uid)
@@ -407,18 +395,21 @@ async def _finish_registration(message, state, selected: list, custom: str = Non
                interests=", ".join(display) if display else hobby_str),
         parse_mode="HTML", reply_markup=await get_main_kb(uid)
     )
-
-
+ 
+ 
 # ─────────────────────────────────────────
-# /help, /stats, /top, /weak, /exit
+# /help
 # ─────────────────────────────────────────
 @dp.message(Command("help"))
 @dp.message(F.text.in_(["Допомога ❓", "Pomoc ❓", "Help ❓"]))
 async def cmd_help(message: types.Message):
     await message.answer(ul(message.from_user.id, "help.title"), parse_mode="HTML",
                          reply_markup=await get_main_kb(message.from_user.id))
-
-
+ 
+ 
+# ─────────────────────────────────────────
+# /stats
+# ─────────────────────────────────────────
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
     uid  = message.from_user.id
@@ -435,25 +426,28 @@ async def cmd_stats(message: types.Message):
     target    = await db.get_target_lang(uid)
     pct       = cur_xp / max(1, next_xp)
     bar       = "🟩" * int(pct * 10) + "⬜" * (10 - int(pct * 10))
-    streak_line = f"\n{'🔥' * min(streak // 3 + 1, 5)} Серія: <b>{streak} дн. поспіль</b>" if streak >= 1 else ""
+    streak_line = f"\n{'🔥' * min(streak // 3 + 1, 5)} {i18n.t(lang, 'stats.streak')} <b>{streak}</b>" if streak >= 1 else ""
     pts = i18n.t(lang, "stats.points")
     await message.answer(
         f"{i18n.t(lang, 'stats.title')}\n"
         f"{i18n.t(lang, 'stats.style_label')} <b>{style}</b>\n"
         f"{i18n.t(lang, 'stats.hobby_label')} <b>{hobby}</b>\n"
-        f"🌍 Вивчаю: <b>{target}</b>\n\n"
-        f"🎓 Мовний рівень: <b>{level_db}</b>\n"
+        f"{i18n.t(lang, 'stats.studying')} <b>{target}</b>\n\n"
+        f"{i18n.t(lang, 'stats.lang_level')} <b>{level_db}</b>\n"
         f"{i18n.t(lang, 'stats.level_label')} <b>{lvl}</b>\n"
         f"{i18n.t(lang, 'stats.xp_label')} {cur_xp}/{next_xp}\n"
         f"[{bar}]{streak_line}\n\n"
-        f"📚 Слів всього: <b>{word_stat['total']}</b>\n"
-        f"⏰ До повторення: <b>{word_stat['due']}</b>\n"
-        f"✅ Засвоєно: <b>{word_stat['mastered']}</b>\n\n"
+        f"{i18n.t(lang, 'stats.words_label')} <b>{word_stat['total']}</b>\n"
+        f"{i18n.t(lang, 'stats.words_due')} <b>{word_stat['due']}</b>\n"
+        f"{i18n.t(lang, 'stats.words_mastered')} <b>{word_stat['mastered']}</b>\n\n"
         f"{i18n.t(lang, 'stats.record_label')} <b>{best}</b>{pts}",
         parse_mode="HTML", reply_markup=await get_main_kb(uid)
     )
-
-
+ 
+ 
+# ─────────────────────────────────────────
+# /top
+# ─────────────────────────────────────────
 @dp.message(Command("top"))
 @dp.message(F.text.in_(["🏆 ТОП Лідери", "🏆 TOP Gracze", "🏆 TOP Players"]))
 async def cmd_top(message: types.Message):
@@ -471,25 +465,33 @@ async def cmd_top(message: types.Message):
         text += f"{medals[i]} <b>{name}</b> — {user['best_score']}{pts}\n"
     text += i18n.t(lang, "top.footer")
     await message.answer(text, parse_mode="HTML", reply_markup=await get_main_kb(uid))
-
-
+ 
+ 
+# ─────────────────────────────────────────
+# /weak
+# ─────────────────────────────────────────
 @dp.message(Command("weak"))
 async def cmd_weak(message: types.Message):
     uid   = message.from_user.id
+    lang  = ulang(uid)
     words = await db.get_weak_words(uid, limit=10)
     if not words:
-        return await message.answer("🎉 Слабких слів не знайдено!",
+        return await message.answer(i18n.t(lang, "weak.empty"),
                                     reply_markup=await get_main_kb(uid))
-    text = "🔴 <b>Найважчі слова (найнижчий ease factor):</b>\n\n"
+    text = f"🔴 <b>{i18n.t(lang, 'weak.title')}</b>\n\n"
     for w in words:
         filled = min(int((w['ease_factor'] - 1.3) / 0.3), 5)
         bar    = "🟥" * max(1, filled) + "⬜" * (5 - max(1, filled))
         text  += (f"<b>{w['word']}</b> — {w['translation']} [{w['language']}]\n"
-                  f"   EF: {w['ease_factor']:.2f} {bar} | повторень: {w['usage_count']}\n\n")
-    text += "<i>Ці слова отримують коротший інтервал при SuperMemo-2</i>"
+                  f"   EF: {w['ease_factor']:.2f} {bar} | "
+                  f"{i18n.t(lang, 'weak.repetitions')}: {w['usage_count']}\n\n")
+    text += f"<i>{i18n.t(lang, 'weak.footer')}</i>"
     await message.answer(text, parse_mode="HTML", reply_markup=await get_main_kb(uid))
-
-
+ 
+ 
+# ─────────────────────────────────────────
+# /exit
+# ─────────────────────────────────────────
 @dp.message(Command("exit"))
 async def cmd_exit(message: types.Message, state: FSMContext):
     uid = message.from_user.id
@@ -497,8 +499,8 @@ async def cmd_exit(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(ul(uid, "exit.done", commands=ul(uid, "help.commands_list")),
                          reply_markup=await get_main_kb(uid))
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # ДОДАВАННЯ СЛОВА
 # ─────────────────────────────────────────
@@ -508,8 +510,8 @@ async def cmd_add_word(message: types.Message, state: FSMContext):
     await db.update_last_active(uid)
     await state.set_state(AddWord.waiting_for_word)
     await message.answer(ul(uid, "add_word.enter_word"), reply_markup=await get_main_kb(uid))
-
-
+ 
+ 
 @dp.message(AddWord.waiting_for_word)
 async def process_word(message: types.Message, state: FSMContext):
     if not message.text:
@@ -521,8 +523,8 @@ async def process_word(message: types.Message, state: FSMContext):
     await state.set_state(AddWord.waiting_for_language)
     await message.answer(ul(uid, "add_word.choose_lang"),
                          reply_markup=_study_lang_keyboard(uid))
-
-
+ 
+ 
 @dp.message(AddWord.waiting_for_language)
 async def process_language(message: types.Message, state: FSMContext):
     if not message.text:
@@ -549,8 +551,8 @@ async def process_language(message: types.Message, state: FSMContext):
     await state.set_state(AddWord.waiting_for_translation)
     await message.answer(ul(uid, "add_word.autotrans", translation=html.escape(auto_trans)),
                          reply_markup=trans_kb, parse_mode="HTML")
-
-
+ 
+ 
 @dp.message(AddWord.waiting_for_translation)
 async def process_custom_translation(message: types.Message, state: FSMContext):
     if not message.text:
@@ -563,24 +565,44 @@ async def process_custom_translation(message: types.Message, state: FSMContext):
     final_translation = (data['auto_translation']
                          if message.text.startswith(save_prefix)
                          else message.text.strip())
+ 
     await message.answer(ul(uid, "add_word.saving"))
-    transc, assoc, visual = await ai_manager.get_full_word_info(
+ 
+    # Один запит — все одразу
+    info     = await ai_manager.get_full_word_info(
         data['word'], final_translation, data['language'],
         response_lang=ai_lang_name(uid)
     )
-    img = await ai_manager.get_image_url(visual)
-    if not img: img = await ai_manager.get_image_url(data['word'])
-    if not img: img = await ai_manager.get_image_url(final_translation)
+    transc   = info["transcription"]
+    assoc    = info["association"]
+    examples = info["examples"]
+ 
+    # Перекладаємо слово на англійську для кращого пошуку картинки
+    try:
+        word_en = GoogleTranslator(source='auto', target='en').translate(data['word'])
+    except:
+        word_en = data['word']
+ 
+    img = (await ai_manager.get_image_url(info["image_query"]) or
+           await ai_manager.get_image_url(word_en) or
+           await ai_manager.get_image_url(data['word']))
+ 
     added = await db.add_word_to_db(uid, data['word'], final_translation,
                                     data['language'], img, assoc, transc)
     if added:
-        text = ul(uid, "add_word.added",
-                  word=html.escape(data['word']),
-                  transcription=html.escape(transc),
-                  translation=html.escape(final_translation),
-                  association=html.escape(assoc))
+        ex_text = ""
+        if examples:
+            ex_text = "\n\n📝 <b>" + i18n.t(ulang(uid), "add_word.examples") + ":</b>\n" + \
+                      "\n".join(f"• {e}" for e in examples)
+        text = (
+            f"✅ <b>{html.escape(data['word'])}</b> {html.escape(transc)} — "
+            f"{html.escape(final_translation)}\n\n"
+            f"🧠 {html.escape(assoc)}"
+            f"{ex_text}"
+        )
     else:
         text = ul(uid, "add_word.already_exists")
+ 
     inline_kb = types.InlineKeyboardMarkup(inline_keyboard=[[
         types.InlineKeyboardButton(text=ul(uid, "btn.regen_photo"),
                                    callback_data=f"regen:{data['word'][:20]}")]])
@@ -597,10 +619,11 @@ async def process_custom_translation(message: types.Message, state: FSMContext):
         else:
             await message.answer(f"✅ {data['word']} — {final_translation}",
                                  reply_markup=inline_kb if added else None)
+ 
     await message.answer(ul(uid, "add_word.continue"), reply_markup=await get_main_kb(uid))
     await state.set_state(AddWord.waiting_for_word)
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # СЛОВО ДНЯ
 # ─────────────────────────────────────────
@@ -610,8 +633,8 @@ async def cmd_word_of_day(message: types.Message, state: FSMContext):
     await state.set_state(WordOfDayState.waiting_for_language)
     await message.answer(ul(uid, "word_of_day.choose_lang"),
                          reply_markup=_study_lang_keyboard(uid))
-
-
+ 
+ 
 @dp.message(WordOfDayState.waiting_for_language)
 async def process_wod_lang(message: types.Message, state: FSMContext):
     if not message.text:
@@ -639,10 +662,16 @@ async def process_wod_lang(message: types.Message, state: FSMContext):
             w, t_word = parts[0].strip(), parts[1].strip()
             break
     if w and t_word:
-        transc, assoc, visual = await ai_manager.get_full_word_info(
-            w, t_word, lang_learn, response_lang=native
-        )
-        img = await ai_manager.get_image_url(visual) or await ai_manager.get_image_url(w)
+        info   = await ai_manager.get_full_word_info(w, t_word, lang_learn, response_lang=native)
+        transc = info["transcription"]
+        assoc  = info["association"]
+        try:
+            w_en = GoogleTranslator(source='auto', target='en').translate(w)
+        except:
+            w_en = w
+        img = (await ai_manager.get_image_url(info["image_query"]) or
+               await ai_manager.get_image_url(w_en) or
+               await ai_manager.get_image_url(w))
         await state.update_data(new_word=w, translation=t_word, lang=lang_learn,
                                 image_url=img, association=assoc, transcription=transc)
         msg_text = ul(uid, "word_of_day.result",
@@ -668,8 +697,8 @@ async def process_wod_lang(message: types.Message, state: FSMContext):
         await message.answer(ul(uid, "word_of_day.ai_confused", result=result),
                              reply_markup=await get_main_kb(uid))
         await state.clear()
-
-
+ 
+ 
 @dp.message(WordOfDayState.waiting_for_action)
 async def process_wod_action(message: types.Message, state: FSMContext):
     if not message.text:
@@ -688,8 +717,8 @@ async def process_wod_action(message: types.Message, state: FSMContext):
             reply_markup=await get_main_kb(uid)
         )
         await state.clear()
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # ПРАКТИКА — SuperMemo-2
 # ─────────────────────────────────────────
@@ -709,8 +738,8 @@ async def cmd_practice(message: types.Message, state: FSMContext):
         resize_keyboard=True, one_time_keyboard=True)
     await state.set_state(PracticeWord.waiting_for_language)
     await message.answer(ul(uid, "practice.words_today", count=len(words)), reply_markup=lang_kb)
-
-
+ 
+ 
 @dp.message(PracticeWord.waiting_for_language)
 async def practice_choose_lang(message: types.Message, state: FSMContext):
     if not message.text:
@@ -734,8 +763,8 @@ async def practice_choose_lang(message: types.Message, state: FSMContext):
         await message.answer_photo(w['image_url'], caption=q, parse_mode="HTML")
     else:
         await message.answer(q, parse_mode="HTML")
-
-
+ 
+ 
 @dp.message(PracticeWord.waiting_for_answer)
 async def process_practice_ans(message: types.Message, state: FSMContext):
     if not message.text:
@@ -751,21 +780,25 @@ async def process_practice_ans(message: types.Message, state: FSMContext):
     quality    = 5 if is_correct else (2 if user_ans in correct or correct in user_ans else 0)
     await db.update_word_progress_sm2(uid, w['word'], quality)
     level, streak, is_new_day = await _update_progress(uid)
+    lang = ulang(uid)
+ 
     reply = (ul(uid, "practice.correct", word=w['word']) if is_correct
              else ul(uid, "practice.wrong", word=w['word'],
                      transcription=w['transcription'] or '',
                      association=w['association'] or ''))
+ 
     if is_new_day and streak > 1:
-        reply += f"\n\n🔥 Серія: {streak} днів поспіль!"
+        reply += f"\n\n{i18n.t(lang, 'practice.streak_msg', streak=streak)}"
         if streak in (3, 7, 14, 30, 100):
-            reply += f"\n🏅 Досягнення: {streak}-денна серія!"
+            reply += f"\n{i18n.t(lang, 'practice.streak_achievement', streak=streak)}"
+ 
     await message.answer(reply)
     data['pidx'] += 1
     if data['pidx'] >= len(data['plist']):
         summary = ul(uid, "practice.finished")
-        summary += f"\n\n📈 Рівень: <b>{level}</b>"
+        summary += f"\n\n{i18n.t(lang, 'practice.summary_level', level=level)}"
         if streak > 0:
-            summary += f"\n🔥 Серія: <b>{streak} дн.</b>"
+            summary += f"\n{i18n.t(lang, 'practice.summary_streak', streak=streak)}"
         await message.answer(summary, parse_mode="HTML", reply_markup=await get_main_kb(uid))
         await state.clear()
     else:
@@ -774,13 +807,13 @@ async def process_practice_ans(message: types.Message, state: FSMContext):
         q  = ul(uid, "practice.question",
                 translation=html.escape(nw['translation']), lang=nw['language'])
         if nw.get('interval'):
-            q += f"\n<i>⏱ {nw['interval']} дн. | EF: {nw.get('ease_factor', 2.5):.1f}</i>"
+            q += f"\n<i>⏱ {nw['interval']} {i18n.t(lang, 'practice.days')} | EF: {nw.get('ease_factor', 2.5):.1f}</i>"
         if nw['image_url']:
             await message.answer_photo(nw['image_url'], caption=q, parse_mode="HTML")
         else:
             await message.answer(q, parse_mode="HTML")
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # AI
 # ─────────────────────────────────────────
@@ -790,8 +823,8 @@ async def cmd_ai(message: types.Message, state: FSMContext):
     uid = message.from_user.id
     await state.set_state(AIHelper.waiting_for_prompt)
     await message.answer(ul(uid, "ai.enter_word"), reply_markup=await get_main_kb(uid))
-
-
+ 
+ 
 @dp.message(AIHelper.waiting_for_prompt)
 async def process_ai_prompt(message: types.Message, state: FSMContext):
     if not message.text:
@@ -800,18 +833,27 @@ async def process_ai_prompt(message: types.Message, state: FSMContext):
         return await cmd_exit(message, state)
     uid   = message.from_user.id
     word  = message.text.strip()
-    hobby = await db.get_user_hobby(uid) or "повсякденне життя"
+    hobby = await db.get_user_hobby(uid) or "everyday life"
     await message.answer(ul(uid, "ai.thinking"))
     txt = ul(uid, "errors.gen_error")
     try:
+        # Перекладаємо на англійську для пошуку картинки
+        try:
+            word_en = GoogleTranslator(source='auto', target='en').translate(word)
+        except:
+            word_en = word
+ 
         txt, img = await asyncio.gather(
             ai_manager.get_ai_explanation_text(word, "auto", hobby,
                                                response_lang=ai_lang_name(uid)),
-            ai_manager.get_image_url(word)
+            ai_manager.get_image_url(word_en)
         )
+        if not img:
+            img = await ai_manager.get_image_url(word)
+ 
         inline = types.InlineKeyboardMarkup(inline_keyboard=[[
             types.InlineKeyboardButton(text=ul(uid, "btn.regen_photo"),
-                                       callback_data=f"regen:{word[:20]}")]])
+                                       callback_data=f"regen:{word_en[:20]}")]])
         prefix = ul(uid, "ai.result_prefix")
         if img:
             await message.answer_photo(img, caption=f"{prefix}{txt}"[:1024],
@@ -822,8 +864,8 @@ async def process_ai_prompt(message: types.Message, state: FSMContext):
         print(f"⚠️ AI error: {e}")
         await message.answer(f"🤖\n\n{txt}", parse_mode=None)
     await message.answer(ul(uid, "ai.ask_next"))
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # ІНШІ КОМАНДИ
 # ─────────────────────────────────────────
@@ -831,8 +873,8 @@ async def process_ai_prompt(message: types.Message, state: FSMContext):
 async def cmd_delete_word(message: types.Message, state: FSMContext):
     await state.set_state(DeleteWord.waiting_for_word)
     await message.answer(ul(message.from_user.id, "delete.enter_word"))
-
-
+ 
+ 
 @dp.message(DeleteWord.waiting_for_word)
 async def process_delete_word(message: types.Message, state: FSMContext):
     if not message.text:
@@ -843,8 +885,8 @@ async def process_delete_word(message: types.Message, state: FSMContext):
     await db.delete_word_from_db(uid, message.text.strip())
     await message.answer(ul(uid, "delete.done"), reply_markup=await get_main_kb(uid))
     await state.clear()
-
-
+ 
+ 
 @dp.message(Command("all_words"))
 async def cmd_all_words(message: types.Message):
     uid   = message.from_user.id
@@ -855,13 +897,13 @@ async def cmd_all_words(message: types.Message):
     rows  = "\n".join([ul(uid, "all_words.row", word=w['word'],
                           translation=w['translation']) for w in words])
     await message.answer((title + rows)[:4000])
-
-
+ 
+ 
 @dp.message(Command("import_words"))
 async def cmd_import_words(message: types.Message):
     await message.answer(ul(message.from_user.id, "import.instructions"))
-
-
+ 
+ 
 @dp.message(F.document)
 async def process_document(message: types.Message):
     uid = message.from_user.id
@@ -882,16 +924,16 @@ async def process_document(message: types.Message):
                              reply_markup=await get_main_kb(uid))
     except Exception as e:
         await message.answer(ul(uid, "import.error", error=str(e)))
-
-
+ 
+ 
 @dp.message(Command("feedback"))
 @dp.message(F.text.in_(["Відгук 💬", "Opinia 💬", "Feedback 💬"]))
 async def cmd_feedback(message: types.Message, state: FSMContext):
     uid = message.from_user.id
     await state.set_state(FeedbackState.waiting_for_message)
     await message.answer(ul(uid, "feedback.prompt"), reply_markup=types.ReplyKeyboardRemove())
-
-
+ 
+ 
 @dp.message(FeedbackState.waiting_for_message)
 async def process_feedback(message: types.Message, state: FSMContext):
     if not message.text:
@@ -902,8 +944,8 @@ async def process_feedback(message: types.Message, state: FSMContext):
     await db.save_feedback(uid, message.from_user.username or "Unknown", message.text)
     await state.clear()
     await message.answer(ul(uid, "feedback.thanks"), reply_markup=await get_main_kb(uid))
-
-
+ 
+ 
 @dp.callback_query(F.data.startswith("regen:"))
 async def callback_regenerate(callback: types.CallbackQuery):
     uid = callback.from_user.id
@@ -924,8 +966,8 @@ async def callback_regenerate(callback: types.CallbackQuery):
     except Exception as e:
         print(f"⚠️ Помилка регенерації: {e}")
         await callback.answer(ul(uid, "errors.regen_err"), show_alert=True)
-
-
+ 
+ 
 @dp.message(F.content_type == types.ContentType.WEB_APP_DATA)
 async def process_web_app_data(message: types.Message):
     uid  = message.from_user.id
@@ -941,17 +983,16 @@ async def process_web_app_data(message: types.Message):
             await db.update_best_score(uid, score)
             msg += ul(uid, "webapp.new_record", old=current_best)
         await message.answer(msg, reply_markup=await get_main_kb(uid))
-
-
+ 
+ 
 # ─────────────────────────────────────────
 # ЗАПУСК
 # ─────────────────────────────────────────
 async def main():
     await db.init_connection()
     await db.init_db()
-    print("✅ Бот запущено! Multilang: uk/pl/en | SM-2 | Streak | Ukrainian study")
-    await dp.start_polling(bot)
-
-
+    print("✅ Бот запущено! Multilang: uk/pl/en | SM-2 | Streak")
+    await dp.start_polling(bot) 
+ 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -124,6 +124,10 @@
     "title": "📊 <b>Your Profile</b>",
     "style_label": "👤 Learner type:",
     "hobby_label": "🎯 Hobbies:",
+<<<<<<< HEAD
+    "studying": "🌍 Learning:",
+=======
+>>>>>>> 71debf1d056f21c2d5d48e4f61090277ad2621f0
     "level_label": "🏆 Level:",
     "xp_label": "⭐ Experience:",
     "words_label": "📚 Saved words:",
@@ -223,5 +227,15 @@
   "webapp": {
     "result": "🎮 Result: {score} points!\n📚 Words reviewed: {count}",
     "new_record": "\n🏆 New record! (Previous: {old})"
+<<<<<<< HEAD
+  },
+  "weak": {
+    "title": "Hardest words (lowest ease factor):",
+    "repetitions": "repetitions",
+    "footer": "These words get a shorter interval in SuperMemo-2"
   }
 }
+=======
+  }
+}
+>>>>>>> 71debf1d056f21c2d5d48e4f61090277ad2621f0
