@@ -1,14 +1,3 @@
-"""
-i18n.py — система локалізації для WordBot
-=========================================
-Використання:
-    from i18n import t, get_user_lang, set_user_lang
-
-    lang = get_user_lang(user_id)        # → 'uk' / 'pl' / 'en'
-    text = t(lang, "add_word.enter_word")
-    text = t(lang, "hobby.selected_hint", count=3, names="Ігри, Спорт")
-"""
-
 import json
 import os
 from functools import lru_cache
@@ -43,16 +32,13 @@ def _load_locale(lang: str) -> dict:
 
 # ---------- Основна функція перекладу ----------
 
-def t(lang: str, key: str, **kwargs) -> str:
+# ---------- Основна функція перекладу ----------
+
+def t(locale: str, key: str, **kwargs) -> str:
     """
     Повернути локалізований рядок за точковим ключем.
-
-    Приклади:
-        t("uk", "start.welcome_back")
-        t("pl", "hobby.selected_hint", count=2, names="Gry, Sport")
-        t("en", "add_word.save_btn", translation="Apple")
     """
-    data = _load_locale(lang)
+    data = _load_locale(locale)
     parts = key.split(".")
     val: object = data
     for part in parts:
@@ -65,7 +51,7 @@ def t(lang: str, key: str, **kwargs) -> str:
 
     if not isinstance(val, str):
         # Якщо ключ не знайдено — спробуємо дефолтну мову
-        if lang != DEFAULT_LANG:
+        if locale != DEFAULT_LANG:
             return t(DEFAULT_LANG, key, **kwargs)
         return key  # крайній fallback: повернути сам ключ
 

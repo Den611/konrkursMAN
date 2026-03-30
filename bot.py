@@ -720,7 +720,7 @@ async def process_wod_action(message: types.Message, state: FSMContext):
  
  
 # ─────────────────────────────────────────
-# ПРАКТИКА — SuperMemo-2
+# ПРАКТИКА — SuperMemo-2 (Inline Флеш-картки)
 # ─────────────────────────────────────────
 @dp.message(Command("practice"))
 async def cmd_practice(message: types.Message, state: FSMContext):
@@ -738,80 +738,125 @@ async def cmd_practice(message: types.Message, state: FSMContext):
         resize_keyboard=True, one_time_keyboard=True)
     await state.set_state(PracticeWord.waiting_for_language)
     await message.answer(ul(uid, "practice.words_today", count=len(words)), reply_markup=lang_kb)
- 
- 
+
+
 @dp.message(PracticeWord.waiting_for_language)
 async def practice_choose_lang(message: types.Message, state: FSMContext):
-    if not message.text:
-        return
+    if not message.text: return
     uid = message.from_user.id
     if message.text == '/exit':
         return await cmd_exit(message, state)
-    target    = (await state.get_data())['all_practice_words']
+        
+    target = (await state.get_data())['all_practice_words']
     all_langs = ul(uid, "practice.all_langs_btn")
     if message.text != all_langs:
         target = [w for w in target if w['language'] == message.text]
+        
     if not target:
         return await message.answer(ul(uid, "practice.empty_lang"))
+        
     random.shuffle(target)
     await state.update_data(plist=target[:10], pidx=0)
     await state.set_state(PracticeWord.waiting_for_answer)
-    w = target[0]
-    q = ul(uid, "practice.question",
-           translation=html.escape(w['translation']), lang=w['language'])
-    if w['image_url']:
-        await message.answer_photo(w['image_url'], caption=q, parse_mode="HTML")
+    
+    # Відправляємо першу картку
+    await send_practice_flashcard(message, uid, target[0])
+
+
+async def send_practice_flashcard(message_obj: types.Message, uid: int, word_data: dict):
+    """Допоміжна функція для відправки флеш-картки з кнопкою 'Показати переклад'"""
+    q = ul(uid, "practice.question", translation=html.escape(word_data['translation']), lang=word_data['language'])
+    
+    # Кнопка для розвороту картки
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[[
+        types.InlineKeyboardButton(text="👀 Показати відповідь", callback_data="pract_show")
+    ]])
+    
+    if word_data['image_url']:
+        await message_obj.answer_photo(word_data['image_url'], caption=q, reply_markup=kb, parse_mode="HTML")
     else:
-        await message.answer(q, parse_mode="HTML")
- 
- 
-@dp.message(PracticeWord.waiting_for_answer)
-async def process_practice_ans(message: types.Message, state: FSMContext):
-    if not message.text:
-        return
-    uid = message.from_user.id
-    if message.text == "/exit":
-        return await cmd_exit(message, state)
-    data       = await state.get_data()
-    w          = data['plist'][data['pidx']]
-    user_ans   = message.text.strip().lower()
-    correct    = w['word'].lower()
-    is_correct = user_ans == correct
-    quality    = 5 if is_correct else (2 if user_ans in correct or correct in user_ans else 0)
+        await message_obj.answer(q, reply_markup=kb, parse_mode="HTML")
+
+
+@dp.callback_query(F.data == "pract_show", PracticeWord.waiting_for_answer)
+async def practice_show_answer(callback: types.CallbackQuery, state: FSMContext):
+    """Обробка натискання 'Показати відповідь'"""
+    uid = callback.from_user.id
+    data = await state.get_data()
+    w = data['plist'][data['pidx']]
+    
+    ans_text = (
+        f"🎯 <b>Правильна відповідь:</b>\n\n"
+        f"🇬🇧 Слово: <b>{html.escape(w['word'])}</b> {html.escape(w['transcription'] or '')}\n"
+        f"🇺🇦 Переклад: {html.escape(w['translation'])}\n"
+        f"💡 Асоціація: <i>{html.escape(w['association'] or '')}</i>\n\n"
+        f"Оціни, наскільки добре ти пам'ятав це слово:"
+    )
+    
+    # Кнопки самооцінки (SuperMemo-2)
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🟢 Легко (5)", callback_data="pract_q:5"),
+         types.InlineKeyboardButton(text="🟡 Нормально (4)", callback_data="pract_q:4")],
+        [types.InlineKeyboardButton(text="🟠 Важко (3)", callback_data="pract_q:3"),
+         types.InlineKeyboardButton(text="🔴 Забув (1)", callback_data="pract_q:1")]
+    ])
+    
+    if callback.message.photo:
+        await callback.message.edit_caption(caption=ans_text, reply_markup=kb, parse_mode="HTML")
+    else:
+        await callback.message.edit_text(text=ans_text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("pract_q:"), PracticeWord.waiting_for_answer)
+async def process_practice_quality(callback: types.CallbackQuery, state: FSMContext):
+    """Обробка оцінки користувача і перехід до наступного слова"""
+    uid = callback.from_user.id
+    quality = int(callback.data.split(":")[1])
+    
+    data = await state.get_data()
+    w = data['plist'][data['pidx']]
+    lang = ulang(uid)
+    
+    # 1. Оновлюємо математику інтервалів у БД
     await db.update_word_progress_sm2(uid, w['word'], quality)
     level, streak, is_new_day = await _update_progress(uid)
-    lang = ulang(uid)
- 
-    reply = (ul(uid, "practice.correct", word=w['word']) if is_correct
-             else ul(uid, "practice.wrong", word=w['word'],
-                     transcription=w['transcription'] or '',
-                     association=w['association'] or ''))
- 
-    if is_new_day and streak > 1:
-        reply += f"\n\n{i18n.t(lang, 'practice.streak_msg', streak=streak)}"
-        if streak in (3, 7, 14, 30, 100):
-            reply += f"\n{i18n.t(lang, 'practice.streak_achievement', streak=streak)}"
- 
-    await message.answer(reply)
+    
+    # 2. Переходимо до наступного слова
     data['pidx'] += 1
+    
+    # Прибираємо кнопки з поточної картки, щоб не натискали двічі
+    await callback.message.edit_reply_markup(reply_markup=None)
+    
     if data['pidx'] >= len(data['plist']):
+        # Тренування завершено
         summary = ul(uid, "practice.finished")
         summary += f"\n\n{i18n.t(lang, 'practice.summary_level', level=level)}"
-        if streak > 0:
+        
+        if is_new_day and streak > 1:
+            summary += f"\n{i18n.t(lang, 'practice.streak_msg', streak=streak)}"
+            if streak in (3, 7, 14, 30, 100):
+                summary += f"\n{i18n.t(lang, 'practice.streak_achievement', streak=streak)}"
+        elif streak > 0:
             summary += f"\n{i18n.t(lang, 'practice.summary_streak', streak=streak)}"
-        await message.answer(summary, parse_mode="HTML", reply_markup=await get_main_kb(uid))
+            
+        await callback.message.answer(summary, parse_mode="HTML", reply_markup=await get_main_kb(uid))
         await state.clear()
     else:
+        # Відправляємо наступну картку
         await state.update_data(pidx=data['pidx'])
-        nw = data['plist'][data['pidx']]
-        q  = ul(uid, "practice.question",
-                translation=html.escape(nw['translation']), lang=nw['language'])
-        if nw.get('interval'):
-            q += f"\n<i>⏱ {nw['interval']} {i18n.t(lang, 'practice.days')} | EF: {nw.get('ease_factor', 2.5):.1f}</i>"
-        if nw['image_url']:
-            await message.answer_photo(nw['image_url'], caption=q, parse_mode="HTML")
-        else:
-            await message.answer(q, parse_mode="HTML")
+        next_w = data['plist'][data['pidx']]
+        await send_practice_flashcard(callback.message, uid, next_w)
+        
+    await callback.answer()
+
+
+@dp.message(PracticeWord.waiting_for_answer)
+async def process_practice_text_fallback(message: types.Message, state: FSMContext):
+    """Якщо під час карток юзер вирішив щось написати замість кнопок"""
+    if message.text == "/exit":
+        return await cmd_exit(message, state)
+    await message.answer("👆 Будь ласка, використовуйте кнопки під повідомленням (Показати відповідь / Оцінити) або натисніть /exit.")
  
  
 # ─────────────────────────────────────────
