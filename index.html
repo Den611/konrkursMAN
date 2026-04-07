@@ -172,164 +172,217 @@
         <button class="main-btn" style="background: #444;" onclick="location.reload()">🔄 Ще раз</button>
     </div>
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
 
-        const demoWords = [
-            {w: "Apple", t: "Яблуко"}, {w: "Car", t: "Машина"}, {w: "House", t: "Будинок"},
-            {w: "Friend", t: "Друг"}, {w: "Time", t: "Час"}, {w: "Work", t: "Робота"}
-        ];
+    const demoWords = [
+        {w: "Apple", t: "Яблуко"}, {w: "Car", t: "Машина"}, {w: "House", t: "Будинок"},
+        {w: "Friend", t: "Друг"}, {w: "Time", t: "Час"}, {w: "Work", t: "Робота"}
+    ];
 
-        let wordDatabase = [];
-        let score = 0;
-        let timeLeft = 60;
-        let currentWord = {};
-        let timerInt;
-        let correctWordsList = [];
+    let wordDatabase = [];
+    let score = 0;
+    let timeLeft = 60;
+    let currentWord = {};
+    let timerInt;
+    let correctWordsList = [];
 
-        function loadWordsFromUrl() {
-            try {
-                const urlParams = new URLSearchParams(window.location.search);
-                const dataStr = urlParams.get('data');
+    // --- АЛГОРИТМ НЕЧІТКОГО ПОШУКУ (FUZZY MATCHING) ---
+    function levenshteinDistance(a, b) {
+        a = a.toLowerCase().trim();
+        b = b.toLowerCase().trim();
+        
+        if (a.length > b.length) {
+            let tmp = a; a = b; b = tmp;
+        }
+        
+        let prev = Array.from({length: a.length + 1}, (_, i) => i);
+        let curr = new Array(a.length + 1);
 
-                if (dataStr) {
-                    const decoded = decodeURIComponent(dataStr);
-                    const words = JSON.parse(decoded);
-                    if (Array.isArray(words) && words.length >= 4) {
-                        wordDatabase = words;
-                    } else {
-                        throw new Error("Not enough words");
-                    }
+        for (let j = 1; j <= b.length; j++) {
+            curr[0] = j;
+            for (let i = 1; i <= a.length; i++) {
+                if (a[i - 1] === b[j - 1]) {
+                    curr[i] = prev[i - 1];
                 } else {
-                    throw new Error("No data");
+                    curr[i] = 1 + Math.min(
+                        prev[i],      // видалення
+                        curr[i - 1],  // вставка
+                        prev[i - 1]   // заміна
+                    );
                 }
-            } catch (e) {
-                console.log("Using demo words:", e.message);
-                wordDatabase = demoWords;
-                tg.showAlert("Демо-режим. Додайте більше слів у боті!");
             }
+            let tmp = prev; prev = curr; curr = tmp;
         }
+        return prev[a.length];
+    }
 
-        function startGame() {
-            loadWordsFromUrl();
-            score = 0; timeLeft = 60; correctWordsList = [];
-            updateUI();
-            nextRound();
+    function calculateSimilarity(a, b) {
+        let maxLen = Math.max(a.length, b.length);
+        if (maxLen === 0) return 1.0;
+        return 1.0 - (levenshteinDistance(a, b) / maxLen);
+    }
+    // ---------------------------------------------------
 
-            timerInt = setInterval(() => {
-                timeLeft--;
-                updateUI();
-                if(timeLeft <= 0) endGame();
-            }, 1000);
-        }
+    function loadWordsFromUrl() {
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const dataStr = urlParams.get('data');
 
-        function nextRound() {
-            document.getElementById('ansInput').value = '';
-            document.getElementById('ansInput').focus();
-
-            const idx = Math.floor(Math.random() * wordDatabase.length);
-            currentWord = wordDatabase[idx];
-
-            let opts = new Set([currentWord.t]);
-            let attempts = 0;
-            while(opts.size < 4 && attempts < 50) {
-                const rand = wordDatabase[Math.floor(Math.random()*wordDatabase.length)];
-                if(rand.t !== currentWord.t) opts.add(rand.t);
-                attempts++;
-            }
-            // Заглушки якщо мало слів
-            const placeholders = ["Слово", "Тест", "Інше", "Питання"];
-            let p = 0;
-            while(opts.size < 4) opts.add(placeholders[p++] || "???");
-
-            document.getElementById('questionWord').innerText = currentWord.w;
-            const div = document.getElementById('options');
-            div.innerHTML = '';
-
-            Array.from(opts).sort(()=>Math.random()-0.5).forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = 'option-btn';
-                btn.innerText = opt;
-                btn.onclick = () => checkOption(btn, opt);
-                div.appendChild(btn);
-            });
-        }
-
-        function checkInput() {
-            const val = document.getElementById('ansInput').value.trim().toLowerCase();
-            if (val === currentWord.t.toLowerCase()) success(8, true);
-            else failInput();
-        }
-
-        function checkOption(btn, val) {
-            if (val === currentWord.t) {
-                btn.classList.add('correct');
-                success(1, false);
+            if (dataStr) {
+                const decoded = decodeURIComponent(dataStr);
+                const words = JSON.parse(decoded);
+                if (Array.isArray(words) && words.length >= 4) {
+                    wordDatabase = words;
+                } else {
+                    throw new Error("Not enough words");
+                }
             } else {
-                btn.classList.add('wrong');
-                tg.HapticFeedback.notificationOccurred('error');
+                throw new Error("No data");
             }
+        } catch (e) {
+            console.log("Using demo words:", e.message);
+            wordDatabase = demoWords;
+            tg.showAlert("Демо-режим. Додайте більше слів у боті!");
         }
+    }
 
-        function success(pts, isHard) {
-            score += pts;
-            if (!correctWordsList.includes(currentWord.w)) {
-                correctWordsList.push(currentWord.w);
-            }
-            tg.HapticFeedback.notificationOccurred('success');
-            showAnim(pts, isHard);
+    function startGame() {
+        loadWordsFromUrl();
+        score = 0; timeLeft = 60; correctWordsList = [];
+        updateUI();
+        nextRound();
+
+        timerInt = setInterval(() => {
+            timeLeft--;
             updateUI();
-            setTimeout(nextRound, isHard ? 400 : 200);
-        }
+            if(timeLeft <= 0) endGame();
+        }, 1000);
+    }
 
-        function failInput() {
-            tg.HapticFeedback.notificationOccurred('error');
-            const el = document.getElementById('ansInput');
-            el.style.borderColor = '#ff4757';
-            setTimeout(()=>el.style.borderColor = '#444', 400);
-        }
+    function nextRound() {
+        document.getElementById('ansInput').value = '';
+        document.getElementById('ansInput').focus();
 
-        function showAnim(pts, isHard) {
-            const el = document.createElement('div');
-            el.className = 'points-float';
-            el.innerText = `+${pts}`;
-            el.style.color = isHard ? '#ffa502' : '#2ed573';
-            const card = document.querySelector('.card');
-            const rect = card.getBoundingClientRect();
-            el.style.left = (rect.left + rect.width/2 - 10) + 'px';
-            el.style.top = rect.top + 'px';
-            document.body.appendChild(el);
-            setTimeout(()=>el.remove(), 800);
-        }
+        const idx = Math.floor(Math.random() * wordDatabase.length);
+        currentWord = wordDatabase[idx];
 
-        function updateUI() {
-            document.getElementById('scoreVal').innerText = score;
-            document.getElementById('timeVal').innerText = timeLeft;
-            document.getElementById('timer').style.width = (timeLeft/60*100) + '%';
+        let opts = new Set([currentWord.t]);
+        let attempts = 0;
+        while(opts.size < 4 && attempts < 50) {
+            const rand = wordDatabase[Math.floor(Math.random()*wordDatabase.length)];
+            if(rand.t !== currentWord.t) opts.add(rand.t);
+            attempts++;
         }
+        
+        // Заглушки якщо мало слів
+        const placeholders = ["Слово", "Тест", "Інше", "Питання"];
+        let p = 0;
+        while(opts.size < 4) opts.add(placeholders[p++] || "???");
 
-        function endGame() {
-            clearInterval(timerInt);
-            document.getElementById('gameScreen').style.display = 'none';
-            document.getElementById('endScreen').style.display = 'block';
-            document.getElementById('finalScore').innerText = score;
-        }
+        document.getElementById('questionWord').innerText = currentWord.w;
+        const div = document.getElementById('options');
+        div.innerHTML = '';
 
-        function sendResult() {
-            const data = JSON.stringify({
-                type: 'game_result',
-                score: score,
-                learned_words: correctWordsList
-            });
-            tg.sendData(data);
-        }
-
-        document.getElementById('ansInput').addEventListener("keypress", (e) => {
-            if (e.key === "Enter") checkInput();
+        Array.from(opts).sort(()=>Math.random()-0.5).forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = opt;
+            btn.onclick = () => checkOption(btn, opt);
+            div.appendChild(btn);
         });
+    }
 
-        startGame();
-    </script>
+    // ОНОВЛЕНА ФУНКЦІЯ: Перевірка вводу через схожість
+    function checkInput() {
+        const val = document.getElementById('ansInput').value.trim();
+        if (!val) return;
+
+        const correct = currentWord.t;
+        let sim = calculateSimilarity(val, correct);
+
+        // Динамічне нарахування балів залежно від точності
+        if (sim === 1.0) {
+            success(8, true); // Ідеально (+8 балів)
+        } else if (sim >= 0.8) {
+            success(5, true); // Одна опечатка (+5 балів)
+        } else if (sim >= 0.6) {
+            success(2, true); // Кілька помилок, але близько (+2 бали)
+        } else {
+            failInput();      // Зовсім неправильно
+        }
+    }
+
+    function checkOption(btn, val) {
+        if (val === currentWord.t) {
+            btn.classList.add('correct');
+            success(1, false);
+        } else {
+            btn.classList.add('wrong');
+            tg.HapticFeedback.notificationOccurred('error');
+        }
+    }
+
+    function success(pts, isHard) {
+        score += pts;
+        if (!correctWordsList.includes(currentWord.w)) {
+            correctWordsList.push(currentWord.w);
+        }
+        tg.HapticFeedback.notificationOccurred('success');
+        showAnim(pts, isHard);
+        updateUI();
+        setTimeout(nextRound, isHard ? 400 : 200);
+    }
+
+    function failInput() {
+        tg.HapticFeedback.notificationOccurred('error');
+        const el = document.getElementById('ansInput');
+        el.style.borderColor = '#ff4757';
+        setTimeout(()=>el.style.borderColor = '#444', 400);
+    }
+
+    function showAnim(pts, isHard) {
+        const el = document.createElement('div');
+        el.className = 'points-float';
+        el.innerText = `+${pts}`;
+        // Жовтий колір для тексту (складно), зелений для кнопок (легко)
+        el.style.color = isHard ? '#ffa502' : '#2ed573'; 
+        const card = document.querySelector('.card');
+        const rect = card.getBoundingClientRect();
+        el.style.left = (rect.left + rect.width/2 - 10) + 'px';
+        el.style.top = rect.top + 'px';
+        document.body.appendChild(el);
+        setTimeout(()=>el.remove(), 800);
+    }
+
+    function updateUI() {
+        document.getElementById('scoreVal').innerText = score;
+        document.getElementById('timeVal').innerText = timeLeft;
+        document.getElementById('timer').style.width = (timeLeft/60*100) + '%';
+    }
+
+    function endGame() {
+        clearInterval(timerInt);
+        document.getElementById('gameScreen').style.display = 'none';
+        document.getElementById('endScreen').style.display = 'block';
+        document.getElementById('finalScore').innerText = score;
+    }
+
+    function sendResult() {
+        const data = JSON.stringify({
+            type: 'game_result',
+            score: score,
+            learned_words: correctWordsList
+        });
+        tg.sendData(data);
+    }
+
+    document.getElementById('ansInput').addEventListener("keypress", (e) => {
+        if (e.key === "Enter") checkInput();
+    });
+
+    startGame();
+</script>
 </body>
 </html>

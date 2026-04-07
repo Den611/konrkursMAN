@@ -154,7 +154,8 @@
     "saving": "⏳ Zapisuję, szukam obrazka i skojarzenia...",
     "added": "✅ <b>Dodano:</b> {word} {transcription} — {translation}\n🧠 <i>{association}</i>",
     "already_exists": "⚠️ Słowo już jest w słowniku.",
-    "continue": "👇 Kontynuuj:"
+    "continue": "👇 Kontynuuj:",
+    "examples": "Przykłady"
   },
   "word_of_day": {
     "choose_lang": "🌟 Wybierz język dla nowego słowa:",

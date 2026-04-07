@@ -5,6 +5,7 @@ import urllib.parse
 import io
 import html
 import re
+import fuzzy_ext
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.filters import Command
@@ -518,11 +519,40 @@ async def process_word(message: types.Message, state: FSMContext):
         return
     if message.text == '/exit':
         return await cmd_exit(message, state)
+        
     uid = message.from_user.id
-    await state.update_data(word=message.text.strip())
+    input_word = message.text.strip()
+    
+    user_words_raw = await db.get_user_words(uid)
+    
+    if user_words_raw:
+        existing_words = [w['word'] for w in user_words_raw]
+        input_lower = input_word.lower()
+        choices_lower = [w.lower() for w in existing_words]
+        
+        best_match_lower = fuzzy_ext.find_best_match(input_lower, choices_lower, 0.8)
+        
+        if best_match_lower:
+            best_match = next(w for w in existing_words if w.lower() == best_match_lower)
+            
+            if best_match.lower() == input_word.lower():
+                await message.answer(f"⚠️ Слово <b>{best_match}</b> вже є у вашому словнику!", parse_mode="HTML")
+                return
+            else:
+                data = await state.get_data()
+                if data.get("ignore_fuzzy") != input_word:
+                    await state.update_data(ignore_fuzzy=input_word)
+                    await message.answer(
+                        f"🤔 У вас вже є дуже схоже слово: <b>{best_match}</b>.\n"
+                        f"Ви впевнені, що хочете додати <b>{input_word}</b>?\n"
+                        f"<i>Якщо так — просто надішліть його ще раз.</i>", 
+                        parse_mode="HTML"
+                    )
+                    return
+
+    await state.update_data(word=input_word, ignore_fuzzy=None)
     await state.set_state(AddWord.waiting_for_language)
-    await message.answer(ul(uid, "add_word.choose_lang"),
-                         reply_markup=_study_lang_keyboard(uid))
+    await message.answer(ul(uid, "add_word.choose_lang"), reply_markup=_study_lang_keyboard(uid))
  
  
 @dp.message(AddWord.waiting_for_language)
@@ -764,12 +794,11 @@ async def practice_choose_lang(message: types.Message, state: FSMContext):
 
 
 async def send_practice_flashcard(message_obj: types.Message, uid: int, word_data: dict):
-    """Допоміжна функція для відправки флеш-картки з кнопкою 'Показати переклад'"""
     q = ul(uid, "practice.question", translation=html.escape(word_data['translation']), lang=word_data['language'])
+    q += "\n\n⌨️ <i>Напишіть переклад текстом, або натисніть кнопку, щоб здатися.</i>"
     
-    # Кнопка для розвороту картки
     kb = types.InlineKeyboardMarkup(inline_keyboard=[[
-        types.InlineKeyboardButton(text="👀 Показати відповідь", callback_data="pract_show")
+        types.InlineKeyboardButton(text="👀 Не знаю (Показати)", callback_data="pract_show")
     ]])
     
     if word_data['image_url']:
@@ -852,11 +881,59 @@ async def process_practice_quality(callback: types.CallbackQuery, state: FSMCont
 
 
 @dp.message(PracticeWord.waiting_for_answer)
-async def process_practice_text_fallback(message: types.Message, state: FSMContext):
-    """Якщо під час карток юзер вирішив щось написати замість кнопок"""
+async def process_practice_text_input(message: types.Message, state: FSMContext):
+    if not message.text:
+        return
     if message.text == "/exit":
         return await cmd_exit(message, state)
-    await message.answer("👆 Будь ласка, використовуйте кнопки під повідомленням (Показати відповідь / Оцінити) або натисніть /exit.")
+
+    uid = message.from_user.id
+    data = await state.get_data()
+    w = data['plist'][data['pidx']]
+    lang = ulang(uid)
+
+    user_answer = message.text.strip().lower()
+    correct_answer = w['word'].lower()
+
+    sim = fuzzy_ext.similarity(user_answer, correct_answer)
+
+    if sim == 1.0:
+        quality = 5
+        feedback = f"🎯 <b>Ідеально!</b> Це дійсно <b>{html.escape(w['word'])}</b>."
+    elif sim >= 0.8:
+        quality = 4
+        feedback = f"🟡 <b>Майже правильно!</b> Опечатка.\nПравильно: <b>{html.escape(w['word'])}</b>"
+    elif sim >= 0.6:
+        quality = 3
+        feedback = f"🟠 <b>Близько, але є помилки.</b>\nПравильно: <b>{html.escape(w['word'])}</b>"
+    else:
+        quality = 1
+        feedback = f"🔴 <b>Неправильно.</b>\nПравильно: <b>{html.escape(w['word'])}</b>"
+
+    await message.answer(feedback, parse_mode="HTML")
+
+    await db.update_word_progress_sm2(uid, w['word'], quality)
+    level, streak, is_new_day = await _update_progress(uid)
+
+    data['pidx'] += 1
+    
+    if data['pidx'] >= len(data['plist']):
+        summary = ul(uid, "practice.finished")
+        summary += f"\n\n{i18n.t(lang, 'practice.summary_level', level=level)}"
+        
+        if is_new_day and streak > 1:
+            summary += f"\n{i18n.t(lang, 'practice.streak_msg', streak=streak)}"
+            if streak in (3, 7, 14, 30, 100):
+                summary += f"\n{i18n.t(lang, 'practice.streak_achievement', streak=streak)}"
+        elif streak > 0:
+            summary += f"\n{i18n.t(lang, 'practice.summary_streak', streak=streak)}"
+            
+        await message.answer(summary, parse_mode="HTML", reply_markup=await get_main_kb(uid))
+        await state.clear()
+    else:
+        await state.update_data(pidx=data['pidx'])
+        next_w = data['plist'][data['pidx']]
+        await send_practice_flashcard(message, uid, next_w)
  
  
 # ─────────────────────────────────────────
@@ -927,9 +1004,34 @@ async def process_delete_word(message: types.Message, state: FSMContext):
     uid = message.from_user.id
     if message.text == '/exit':
         return await cmd_exit(message, state)
-    await db.delete_word_from_db(uid, message.text.strip())
-    await message.answer(ul(uid, "delete.done"), reply_markup=await get_main_kb(uid))
-    await state.clear()
+        
+    target_word = message.text.strip()
+    
+    user_words = await db.get_user_words(uid)
+    existing_words = [w['word'] for w in user_words] if user_words else []
+    
+    exact_match = next((w for w in existing_words if w.lower() == target_word.lower()), None)
+    
+    if exact_match:
+        await db.delete_word_from_db(uid, exact_match)
+        await message.answer(ul(uid, "delete.done"), reply_markup=await get_main_kb(uid))
+        await state.clear()
+    else:
+        match_lower = fuzzy_ext.find_best_match(
+            target_word.lower(), 
+            [w.lower() for w in existing_words], 
+            0.7
+        )
+        if match_lower:
+            best_match = next(w for w in existing_words if w.lower() == match_lower)
+            kb = types.ReplyKeyboardMarkup(
+                keyboard=[[types.KeyboardButton(text=best_match)], [types.KeyboardButton(text="/exit")]],
+                resize_keyboard=True, one_time_keyboard=True
+            )
+            await message.answer(f"❌ Слово не знайдено. Можливо, ви мали на увазі <b>{best_match}</b>?", 
+                                 reply_markup=kb, parse_mode="HTML")
+        else:
+            await message.answer("❌ Слово не знайдено у вашому словнику. Спробуйте ще раз або /exit.")
  
  
 @dp.message(Command("all_words"))

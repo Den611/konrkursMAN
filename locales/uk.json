@@ -151,7 +151,8 @@
     "saving": "⏳ Зберігаю, шукаю картинку та асоціацію...",
     "added": "✅ <b>Додано:</b> {word} {transcription} — {translation}\n🧠 <i>{association}</i>",
     "already_exists": "⚠️ Слово вже є у словнику.",
-    "continue": "👇 Продовжити:"
+    "continue": "👇 Продовжити:",
+    "examples": "Приклади"
   },
   "word_of_day": {
     "choose_lang": "🌟 Оберіть мову для нового слова:",

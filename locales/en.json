@@ -154,7 +154,8 @@
     "saving": "⏳ Saving, searching for image and association...",
     "added": "✅ <b>Added:</b> {word} {transcription} — {translation}\n🧠 <i>{association}</i>",
     "already_exists": "⚠️ Word already exists in the dictionary.",
-    "continue": "👇 Continue:"
+    "continue": "👇 Continue:",
+    "examples": "Examples"
   },
   "word_of_day": {
     "choose_lang": "🌟 Choose language for the new word:",
