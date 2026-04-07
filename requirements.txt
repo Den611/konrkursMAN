@@ -1,5 +1,6 @@
 aiogram==3.1.0
 deep-translator==1.11.1
+pybind11==2.11.1
 cachetools
 aiohttp
 python-dotenv
