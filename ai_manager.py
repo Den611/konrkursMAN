@@ -3,10 +3,24 @@ import asyncio
 import random
 import re
 import urllib.parse
+import logging
 from config import AI_URL, GEMINI_KEYS, PIXABAY_KEY
  
-FORCE_GEMINI = False
+logger = logging.getLogger(__name__)
  
+FORCE_GEMINI = False
+_session: aiohttp.ClientSession = None
+ 
+async def init_ai_session():
+    global _session
+    if not _session:
+        _session = aiohttp.ClientSession()
+
+async def close_ai_session():
+    global _session
+    if _session:
+        await _session.close()
+        _session = None
  
 def set_ai_mode(force_gemini: bool):
     global FORCE_GEMINI
@@ -25,7 +39,7 @@ class KeyManager:
     def rotate_key(self):
         if self.keys:
             self.current_index = (self.current_index + 1) % len(self.keys)
-            print(f"🔄 [AI] Перемикання на ключ Gemini №{self.current_index + 1}")
+            logger.info(f"🔄 [AI] Перемикання на ключ Gemini №{self.current_index + 1}")
  
  
 key_manager = KeyManager(GEMINI_KEYS)
@@ -33,26 +47,25 @@ key_manager = KeyManager(GEMINI_KEYS)
  
 async def generate_content_safe(prompt: str, model_name: str = "gemma:2b") -> str:
     if not FORCE_GEMINI:
-        print(f"⏳ [AI] Запит до Ollama ({model_name})...")
+        logger.info(f"⏳ [AI] Запит до Ollama ({model_name})...")
         try:
             timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                payload = {"model": model_name, "prompt": prompt, "stream": False}
-                async with session.post(AI_URL, json=payload) as response:
+            payload = {"model": model_name, "prompt": prompt, "stream": False}
+            async with _session.post(AI_URL, json=payload, timeout=timeout) as response:
                     if response.status == 200:
                         data = await response.json()
-                        print("✅ [AI] Ollama відповіла!")
+                        logger.info("✅ [AI] Ollama відповіла!")
                         return data.get("response", "").strip()
-                    print(f"⚠️ [AI] Ollama: {response.status}")
+                    logger.warning(f"⚠️ [AI] Ollama: {response.status}")
         except asyncio.TimeoutError:
-            print("⚠️ [AI] Ollama timeout. Перемикаємось на Gemini!")
+            logger.warning("⚠️ [AI] Ollama timeout. Перемикаємось на Gemini!")
         except Exception as e:
-            print(f"⚠️ [AI] Ollama недоступна ({type(e).__name__}).")
+            logger.error(f"⚠️ [AI] Ollama недоступна ({type(e).__name__}).")
  
     if FORCE_GEMINI:
-        print("⚡ [AI] Режим Gemini API.")
+        logger.info("⚡ [AI] Режим Gemini API.")
     else:
-        print("☁️ [AI] Gemini резерв...")
+        logger.info("☁️ [AI] Gemini резерв...")
  
     if not key_manager.keys:
         return "😅 ШІ зараз перевантажений! Спробуй пізніше."
@@ -63,19 +76,20 @@ async def generate_content_safe(prompt: str, model_name: str = "gemma:2b") -> st
         gemini_url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                       f"gemini-2.5-flash:generateContent?key={api_key}")
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
-                async with session.post(
-                    gemini_url,
-                    json={"contents": [{"parts": [{"text": prompt}]}]}
-                ) as response:
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with _session.post(
+                gemini_url,
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+                timeout=timeout
+            ) as response:
                     if response.status == 200:
                         data = await response.json()
                         try:
                             text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                            print("✅ [AI] Gemini відповіла!")
+                            logger.info("✅ [AI] Gemini відповіла!")
                             return text
                         except (KeyError, IndexError):
-                            print("⚠️ [AI] Фільтр безпеки Google.")
+                            logger.warning("⚠️ [AI] Фільтр безпеки Google.")
                             key_manager.rotate_key()
                             attempts += 1
                             await asyncio.sleep(1)
@@ -88,7 +102,7 @@ async def generate_content_safe(prompt: str, model_name: str = "gemma:2b") -> st
                         else:
                             break
         except Exception as e:
-            print(f"⚠️ [AI] Збій Gemini: {type(e).__name__}")
+            logger.error(f"⚠️ [AI] Збій Gemini: {type(e).__name__}")
             attempts += 1
  
     return "😅 ШІ зараз обробляє багато запитів. Спробуй через хвилину!"
@@ -97,12 +111,16 @@ async def generate_content_safe(prompt: str, model_name: str = "gemma:2b") -> st
 async def get_image_url(query, use_random=False):
     if not query or not PIXABAY_KEY: return None
     try:
-        per_page      = 20 if use_random else 3
-        encoded_query = urllib.parse.quote(query)
-        url = (f"https://pixabay.com/api/?key={PIXABAY_KEY}&q={encoded_query}"
-               f"&image_type=photo&orientation=horizontal&safesearch=true&per_page={per_page}")
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.get(url) as resp:
+        params = {
+            "key": PIXABAY_KEY,
+            "q": query,
+            "image_type": "photo",
+            "orientation": "horizontal",
+            "safesearch": "true",
+            "per_page": 20 if use_random else 3
+        }
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with _session.get("https://pixabay.com/api/", params=params, timeout=timeout) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('hits'):

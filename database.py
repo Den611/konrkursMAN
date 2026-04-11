@@ -1,8 +1,11 @@
 import asyncpg
 import aiosqlite
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from config import SERVER_IP, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT
+
+logger = logging.getLogger(__name__)
 
 # Глобальні змінні для баз даних
 db_pool = None
@@ -69,41 +72,41 @@ async def init_connection():
     from config import NEON_URL
 
     if FORCE_SQLITE:
-        print("🎒 [DB] Примусовий АВТОНОМНИЙ режим (SQLite).")
+        logger.info("🎒 [DB] Примусовий АВТОНОМНИЙ режим (SQLite).")
         sqlite_conn = await aiosqlite.connect('backup_words.db')
         sqlite_conn.row_factory = aiosqlite.Row
         return
 
-    print("🔍 [DB] Стукаємо на ДОМАШНІЙ СЕРВЕР...")
+    logger.info("🔍 [DB] Стукаємо на ДОМАШНІЙ СЕРВЕР...")
     try:
         # Даємо домашньому серверу 3 секунди на відповідь
         db_pool = await asyncio.wait_for(
             asyncpg.create_pool(user=DB_USER, password=DB_PASSWORD, database=DB_NAME, host=SERVER_IP, port=DB_PORT),
             timeout=3.0
         )
-        print("✅ [DB] Підключено до ДОМАШНЬОГО СЕРВЕРА!")
+        logger.info("✅ [DB] Підключено до ДОМАШНЬОГО СЕРВЕРА!")
         return
     except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
-        print("⚠️ [DB] Домашній сервер мовчить.")
+        logger.warning("⚠️ [DB] Домашній сервер мовчить.")
 
     if NEON_URL and "тут_буде_твій_лінк" not in NEON_URL:
-        print("☁️ [DB] Перемикання на хмару NEON...")
+        logger.info("☁️ [DB] Перемикання на хмару NEON...")
         try:
             db_pool = await asyncio.wait_for(
                 asyncpg.create_pool(dsn=NEON_URL),
                 timeout=5.0
             )
-            print("✅ [DB] Підключено до хмари NEON!")
+            logger.info("✅ [DB] Підключено до хмари NEON!")
             return
         except Exception as e:
-            print(f"⚠️ [DB] Neon недоступний: {e}")
+            logger.error(f"⚠️ [DB] Neon недоступний: {e}")
 
-    print("🎒 [DB] Перехід в режим виживання (Локальна SQLite)...")
+    logger.warning("🎒 [DB] Перехід в режим виживання (Локальна SQLite)...")
     FORCE_SQLITE = True
 
     sqlite_conn = await aiosqlite.connect('backup_words.db')
     sqlite_conn.row_factory = aiosqlite.Row
-    print("✅ [DB] Локальна база створена/підключена.")
+    logger.info("✅ [DB] Локальна база створена/підключена.")
 
 async def init_db():
     await db_execute('''
@@ -126,6 +129,20 @@ async def init_db():
         )
     ''')
 
+    # Додавання індексу для швидкого пошуку
+    await db_execute('''
+        CREATE INDEX IF NOT EXISTS idx_user_words_user_id 
+        ON user_words (user_id)
+    ''')
+
+    async def add_column_if_not_exists(table, col, dtype):
+        try:
+            await db_execute(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}")
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "duplicate column name" not in err_msg and "already exists" not in err_msg:
+                logger.error(f"Migration error on {table}.{col}: {e}")
+
     # Міграції
     columns_users = [
         ("start_date", "TEXT"), 
@@ -136,14 +153,10 @@ async def init_db():
         ("learning_style", "TEXT DEFAULT 'Універсал'"),
         ("streak_days", "INTEGER DEFAULT 0"),
         ("interface_lang", "TEXT DEFAULT 'uk'"),
-        ("interface_lang", "TEXT DEFAULT 'uk'"),
         ("target_lang",    "TEXT DEFAULT 'English'"),
     ]
     for col, dtype in columns_users:
-        try:
-            await db_execute(f"ALTER TABLE users ADD COLUMN {col} {dtype}")
-        except:
-            pass
+        await add_column_if_not_exists("users", col, dtype)
 
     columns_words = [
         ("language", "TEXT"), ("usage_count", "INTEGER DEFAULT 0"), ("image_url", "TEXT"),
@@ -151,11 +164,7 @@ async def init_db():
         ("interval", "INTEGER DEFAULT 1"), ("ease_factor", "FLOAT DEFAULT 2.5")
     ]
     for col, dtype in columns_words:
-        try:
-            await db_execute(f"ALTER TABLE user_words ADD COLUMN {col} {dtype}")
-        except:
-            pass
-
+        await add_column_if_not_exists("user_words", col, dtype)
 
 # --- ФУНКЦІЇ ДОСТУПУ ---
 async def add_user(user_id, username):
