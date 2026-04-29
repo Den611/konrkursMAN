@@ -4,11 +4,12 @@ import random
 import re
 import urllib.parse
 import logging
+from utils import ul
 from config import AI_URL, GEMINI_KEYS, PIXABAY_KEY
  
 logger = logging.getLogger(__name__)
  
-FORCE_GEMINI = False
+FORCE_GEMINI = True
 _session: aiohttp.ClientSession = None
  
 async def init_ai_session():
@@ -27,25 +28,37 @@ def set_ai_mode(force_gemini: bool):
     FORCE_GEMINI = force_gemini
  
  
-class KeyManager:
+class RotationManager:
     def __init__(self, keys):
-        self.keys          = [k for k in keys if k.strip()]
-        self.current_index = 0
- 
-    def get_key(self):
-        if not self.keys: return None
-        return self.keys[self.current_index]
- 
-    def rotate_key(self):
-        if self.keys:
-            self.current_index = (self.current_index + 1) % len(self.keys)
-            logger.info(f"🔄 [AI] Перемикання на ключ Gemini №{self.current_index + 1}")
- 
- 
-key_manager = KeyManager(GEMINI_KEYS)
- 
- 
-async def generate_content_safe(prompt: str, model_name: str = "gemma:2b") -> str:
+        self.keys = [k for k in keys if k.strip()]
+        self.models = [
+            "gemini-2.5-flash-lite", # Твоя основна робоча конячка (працює ідеально!)
+            "gemma-3-27b-it",        # Додали -it, можливо тепер запрацює
+            "gemini-2.5-flash",      # Резерв на випадок вичерпання лімітів
+            "gemini-1.5-flash"       # Найнадійніший резерв (має 1500 запитів/день)
+            "gemini-3.1-flash-lite"
+        ]
+        self.current_key_idx = 0
+        self.current_model_idx = 0
+
+    def get_current(self):
+        if not self.keys: return None, None
+        return self.keys[self.current_key_idx], self.models[self.current_model_idx]
+
+    def rotate(self):
+        if not self.keys: return
+        self.current_model_idx += 1
+        if self.current_model_idx >= len(self.models):
+            self.current_model_idx = 0
+            self.current_key_idx = (self.current_key_idx + 1) % len(self.keys)
+            logger.info(f"🔑 [AI] Ліміти моделей вичерпано. Перемикаємо на ключ №{self.current_key_idx + 1}")
+        logger.info(f"🔄 [AI] Використовуємо модель: {self.models[self.current_model_idx]}")
+
+rotation_manager = RotationManager(GEMINI_KEYS)
+
+
+# ДОДАНО параметр uid: int = 0
+async def generate_content_safe(prompt: str, uid: int = 0, model_name: str = "gemma:2b") -> str:
     if not FORCE_GEMINI:
         logger.info(f"⏳ [AI] Запит до Ollama ({model_name})...")
         try:
@@ -61,20 +74,20 @@ async def generate_content_safe(prompt: str, model_name: str = "gemma:2b") -> st
             logger.warning("⚠️ [AI] Ollama timeout. Перемикаємось на Gemini!")
         except Exception as e:
             logger.error(f"⚠️ [AI] Ollama недоступна ({type(e).__name__}).")
- 
+
     if FORCE_GEMINI:
         logger.info("⚡ [AI] Режим Gemini API.")
     else:
         logger.info("☁️ [AI] Gemini резерв...")
- 
-    if not key_manager.keys:
-        return "😅 ШІ зараз перевантажений! Спробуй пізніше."
- 
-    attempts, max_attempts = 0, len(key_manager.keys) + 1
+
+    if not rotation_manager.keys:
+        return ul(uid, "errors.ai_busy") if uid else "😅 ШІ зараз перевантажений! Спробуй пізніше."
+
+    attempts, max_attempts = 0, len(rotation_manager.keys) * len(rotation_manager.models) + 1
     while attempts < max_attempts:
-        api_key    = key_manager.get_key()
+        api_key, current_model = rotation_manager.get_current()
         gemini_url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-                      f"gemini-2.5-flash:generateContent?key={api_key}")
+                      f"{current_model}:generateContent?key={api_key}")
         try:
             timeout = aiohttp.ClientTimeout(total=30)
             async with _session.post(
@@ -86,28 +99,78 @@ async def generate_content_safe(prompt: str, model_name: str = "gemma:2b") -> st
                         data = await response.json()
                         try:
                             text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                            logger.info("✅ [AI] Gemini відповіла!")
+                            logger.info(f"✅ [AI] {current_model} відповіла успішно!")
                             return text
                         except (KeyError, IndexError):
-                            logger.warning("⚠️ [AI] Фільтр безпеки Google.")
-                            key_manager.rotate_key()
+                            logger.warning(f"⚠️ [AI] Фільтр безпеки на {current_model}.")
+                            rotation_manager.rotate()
                             attempts += 1
                             await asyncio.sleep(1)
                             continue
                     else:
+                        error_text = await response.text()
+                        logger.error(f"⚠️ [AI] Помилка {response.status} від {current_model}: {error_text}")
                         if response.status in [429, 403, 404, 500, 503]:
-                            key_manager.rotate_key()
+                            rotation_manager.rotate()
                             attempts += 1
                             await asyncio.sleep(1)
                         else:
                             break
         except Exception as e:
-            logger.error(f"⚠️ [AI] Збій Gemini: {type(e).__name__}")
+            logger.error(f"⚠️ [AI] Збій підключення до {current_model}: {type(e).__name__}")
+            rotation_manager.rotate()
             attempts += 1
- 
-    return "😅 ШІ зараз обробляє багато запитів. Спробуй через хвилину!"
- 
- 
+
+    return ul(uid, "errors.ai_busy") if uid else "😅 ШІ зараз обробляє багато запитів. Спробуй через хвилину!"
+
+
+# ДОДАНО параметр uid: int = 0
+async def generate_premium_content_safe(prompt: str, uid: int = 0) -> str:
+    """Викликає найрозумнішу з доступних моделей для преміум-репетитора."""
+    if not rotation_manager.keys:
+        return ul(uid, "errors.ai_busy") if uid else "😅 ШІ зараз перевантажений! Спробуй пізніше."
+
+    attempts, max_attempts = 0, len(rotation_manager.keys) + 1
+    while attempts < max_attempts:
+        api_key, _ = rotation_manager.get_current()
+        
+        # Використовуємо Gemini 3 Flash (ліміт 20 запитів/день, ідеально для репетитора)
+        gemini_url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+                      f"gemini-3-flash:generateContent?key={api_key}")
+        try:
+            timeout = aiohttp.ClientTimeout(total=45)
+            async with _session.post(
+                gemini_url,
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+                timeout=timeout
+            ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        try:
+                            text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                            logger.info("💎 [AI] Преміум модель Gemini 3 Flash відповіла!")
+                            return text
+                        except (KeyError, IndexError):
+                            rotation_manager.rotate()
+                            attempts += 1
+                            await asyncio.sleep(1)
+                            continue
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"⚠️ [AI PREMIUM] Помилка: {response.status} - {error_text}")
+                        if response.status in [429, 403, 404, 500, 503]:
+                            rotation_manager.rotate()
+                            attempts += 1
+                            await asyncio.sleep(1)
+                        else:
+                            break
+        except Exception as e:
+            logger.error(f"⚠️ [AI PREMIUM] Збій: {type(e).__name__}")
+            attempts += 1
+
+    return ul(uid, "errors.ai_premium_busy") if uid else "😅 Розумна нейромережа зараз зайнята. Спробуй пізніше!"
+
+
 async def get_image_url(query, use_random=False):
     if not query or not PIXABAY_KEY: return None
     try:
@@ -129,75 +192,77 @@ async def get_image_url(query, use_random=False):
     except Exception:
         pass
     return None
- 
- 
+
+
 async def get_full_word_info(word: str, translation: str, lang: str,
-                             response_lang: str = "Ukrainian") -> dict:
-    """
-    Один запит — повертає dict з усіма даними.
-    response_lang — мова на якій писати асоціацію і приклади.
-    """
+                             response_lang: str = "Ukrainian", uid: int = 0) -> dict:
+    # 1. Максимально жорсткий промпт без зайвих слів
     prompt = (
         f"Analyze the word '{word}' ({lang}, translation: '{translation}'). "
-        f"Write EVERYTHING in {response_lang}. NO markdown, NO asterisks. "
-        f"Output EXACTLY this format, each field on a new line:\n"
+        f"Provide the explanation in {response_lang}. "
+        f"CRITICAL: Start every line with the English prefix. No intro, no markdown. "
+        f"Format strictly:\n"
         f"TRANSCRIPTION: [æpl]\n"
-        f"ASSOCIATION: short funny memorable association\n"
-        f"EXAMPLE1: first example sentence\n"
-        f"EXAMPLE2: second example sentence\n"
-        f"EXAMPLE3: third example sentence\n"
-        f"IMAGE: 2-3 word english search query\n"
-        f"Do not write anything else."
+        f"ASSOCIATION: funny memory trick\n"
+        f"EXAMPLE 1: first sentence\n"
+        f"EXAMPLE 2: second sentence\n"
+        f"EXAMPLE 3: third sentence\n"
+        f"IMAGE: search keywords"
     )
-    text = await generate_content_safe(prompt)
- 
+    
+    text = await generate_content_safe(prompt, uid=uid)
+
     result = {
         "transcription": "",
         "association":   translation,
         "examples":      [],
         "image_query":   word,
     }
- 
-    if "😅" in text:
+
+    if "😅" in text or not text:
         return result
- 
+
+    # 2. Покращений парсер: шукає ключові слова в будь-якому регістрі
     for line in text.splitlines():
-        line = (line.strip()
-                    .replace("**", "")
-                    .replace("__", "")
-                    .replace("*", "")
-                    .replace("`", "")
-                    .replace("<", "")
-                    .replace(">", ""))
-        if line.startswith("TRANSCRIPTION:"):
-            result["transcription"] = line.split(":", 1)[1].strip()
-        elif line.startswith("ASSOCIATION:"):
-            result["association"] = line.split(":", 1)[1].strip()
-        elif line.startswith("EXAMPLE1:"):
-            result["examples"].append(line.split(":", 1)[1].strip())
-        elif line.startswith("EXAMPLE2:"):
-            result["examples"].append(line.split(":", 1)[1].strip())
-        elif line.startswith("EXAMPLE3:"):
-            result["examples"].append(line.split(":", 1)[1].strip())
-        elif line.startswith("IMAGE:"):
-            result["image_query"] = line.split(":", 1)[1].strip()
- 
+        line = line.strip().replace("*", "").replace("`", "")
+        if not line or ":" not in line:
+            continue
+            
+        # Розбиваємо рядок на ключ і значення
+        key_part, value_part = line.split(":", 1)
+        key = key_part.strip().upper()
+        value = value_part.strip()
+
+        if "TRANSCRIPTION" in key:
+            result["transcription"] = value
+        elif "ASSOCIATION" in key:
+            result["association"] = value
+        elif "EXAMPLE" in key:
+            # Ловимо EXAMPLE 1, EXAMPLE2, ПРИКЛАД 1 тощо, якщо ШІ знову перекладе
+            result["examples"].append(value)
+        elif "IMAGE" in key:
+            result["image_query"] = value
+
+    # Якщо ШІ таки переклав ключі (наприклад, "АСОЦІАЦІЯ:"), спробуємо знайти їх за змістом
+    # Це фінальний захист, якщо основний цикл нічого не знайшов
+    if result["association"] == translation:
+        for line in text.splitlines():
+            if "асоціація" in line.lower() or "skojarzenie" in line.lower() or "association" in line.lower():
+                if ":" in line:
+                    result["association"] = line.split(":", 1)[1].strip()
+
     return result
- 
- 
+
+
+# ДОДАНО параметр uid: int = 0
 async def get_ai_explanation_text(content: str, language_of_word: str,
                                   hobby: str = "everyday life",
-                                  response_lang: str = "Ukrainian") -> str:
-    """
-    Пояснює слово на мові response_lang з прикладом через хобі.
-    language_of_word = 'auto' → AI сам визначить мову слова.
-    Повертає текст з HTML-форматуванням (bold через <b>).
-    """
+                                  response_lang: str = "Ukrainian", uid: int = 0) -> str:
     if language_of_word == "auto":
         lang_hint = "Detect the language of the word automatically."
     else:
         lang_hint = f"The word is in {language_of_word}."
- 
+
     prompt = (
         f"Explain the word '{content}'. {lang_hint} "
         f"The student is interested in: '{hobby}'. "
@@ -209,17 +274,18 @@ async def get_ai_explanation_text(content: str, language_of_word: str,
         f"3. Association: funny memorable association to remember this word\n"
         f"4. Example: one sentence related to {hobby}"
     )
-    result = await generate_content_safe(prompt)
- 
+    # ПЕРЕДАЄМО uid ДАЛІ
+    result = await generate_content_safe(prompt, uid=uid)
+
     # Конвертуємо **bold** → <b>bold</b>
     result = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', result)
- 
+
     # Чистимо решту markdown
     result = result.replace("__", "").replace("`", "").replace("*", "")
- 
+
     # Безпечна заміна < > (крім наших <b> тегів)
     result = result.replace("<b>", "«B»").replace("</b>", "«/B»")
     result = result.replace("<", "").replace(">", "")
     result = result.replace("«B»", "<b>").replace("«/B»", "</b>")
- 
+
     return result

@@ -158,14 +158,16 @@
     "examples": "Examples"
   },
   "word_of_day": {
-    "choose_lang": "🌟 Choose language for the new word:",
-    "generating": "⏳ Generating word ({lang})...",
-    "result": "🌟 Word of the day: <b>{word}</b> {transcription}\n🇺🇦 Translation: {translation}",
-    "actions": "Actions:",
-    "add_btn": "➕ Add this word",
-    "added": "✅ Added!\n🧠 {association}",
-    "already": "⚠️ Already exists.",
-    "ai_confused": "⚠️ AI got a bit confused:\n{result}\n\nPlease try again!"
+    "result": "🌟 <b>{word}</b> <i>[{transcription}]</i>\n🇬🇧 {translation}",
+    "actions": "👇 What's next?",
+    "add_btn": "➕ Add to Dictionary",
+    "choose_lang": "Which language do you want to learn today? 🌍",
+    "generating": "Generating a random word... ⏳",
+    "already": "Interesting, but this word is already in your dictionary! 📚",
+    "added": "Word successfully added! 🥳\n💡 Your association: {association}",
+    "ai_confused": "AI got a little confused 😅 Please try again.",
+    "association_lbl": "Association",
+    "examples_lbl": "Examples"
   },
   "practice": {
     "all_done": "🎉 All words reviewed for today!",
@@ -187,7 +189,9 @@
     "choose_lang": "🌍 Language of the word?",
     "thinking": "⏳ 🤖 AI is analysing the word and selecting examples...",
     "result_prefix": "🤖 <b>Here is the explanation:</b>\n\n",
-    "ask_next": "🤖 Another word? (or /exit)"
+    "ask_next": "🤖 Another word? (or /exit)",
+    "tutor_limit_reached": "⏳ You have already used the premium tutor today. Come back tomorrow for new analytics!",
+    "tutor_thinking": "🧠 Launching the advanced neural network... Analyzing. This may take up to 45 seconds."
   },
   "delete": {
     "enter_word": "🗑️ Enter the word to delete:",
@@ -220,7 +224,9 @@
   },
   "errors": {
     "gen_error": "Generation error",
-    "regen_err": "Error"
+    "regen_err": "Error",
+    "ai_busy": "😅 AI is currently overloaded! Please try again later.",
+    "ai_premium_busy": "😅 The smart neural network is currently busy. Please try again later."
   },
   "webapp": {
     "result": "🎮 Result: {score} points!\n📚 Words reviewed: {count}",

@@ -158,14 +158,16 @@
     "examples": "Przykłady"
   },
   "word_of_day": {
-    "choose_lang": "🌟 Wybierz język dla nowego słowa:",
-    "generating": "⏳ Generuję słowo ({lang})...",
-    "result": "🌟 Słowo dnia: <b>{word}</b> {transcription}\n🇺🇦 Tłumaczenie: {translation}",
-    "actions": "Akcje:",
-    "add_btn": "➕ Dodaj to słowo",
-    "added": "✅ Dodano!\n🧠 {association}",
-    "already": "⚠️ Już jest.",
-    "ai_confused": "⚠️ AI się trochę pogubił:\n{result}\n\nSpróbuj jeszcze raz!"
+    "result": "🌟 <b>{word}</b> <i>[{transcription}]</i>\n🇵🇱 {translation}",
+    "actions": "👇 Co robimy dalej?",
+    "add_btn": "➕ Dodaj do słownika",
+    "choose_lang": "Jakiego języka chcesz się dzisiaj uczyć? 🌍",
+    "generating": "Generuję losowe słowo... ⏳",
+    "already": "Ciekawe, ale to słowo jest już w Twoim słowniku! 📚",
+    "added": "Słowo zostało pomyślnie dodane! 🥳\n💡 Twoje skojarzenie: {association}",
+    "ai_confused": "SI trochę się pogubiła 😅 Spróbuj ponownie.",
+    "association_lbl": "Skojarzenie",
+    "examples_lbl": "Przykłady"
   },
   "practice": {
     "all_done": "🎉 Na dziś wszystkie słowa powtórzone!",
@@ -186,7 +188,9 @@
     "choose_lang": "🌍 Język słowa?",
     "thinking": "⏳ 🤖 AI analizuje słowo i dobiera przykłady...",
     "result_prefix": "🤖 <b>Oto wyjaśnienie:</b>\n\n",
-    "ask_next": "🤖 Jeszcze jedno słowo? (lub /exit)"
+    "ask_next": "🤖 Jeszcze jedno słowo? (lub /exit)",
+    "tutor_limit_reached": "⏳ Wykorzystałeś już dzisiaj korepetytora premium. Wróć jutro po nową analitykę!",
+    "tutor_thinking": "🧠 Uruchamianie zaawansowanej sieci neuronowej... Analizowanie. Może to zająć do 45 sekund."
   },
   "delete": {
     "enter_word": "🗑️ Wpisz słowo do usunięcia:",
@@ -219,7 +223,9 @@
   },
   "errors": {
     "gen_error": "Błąd generacji",
-    "regen_err": "Błąd"
+    "regen_err": "Błąd",
+    "ai_busy": "😅 SI jest teraz przeciążona! Spróbuj ponownie później.",
+    "ai_premium_busy": "😅 Inteligentna sieć neuronowa jest teraz zajęta. Spróbuj ponownie później."
   },
   "webapp": {
     "result": "🎮 Wynik: {score} punktów!\n📚 Powtórzonych słów: {count}",

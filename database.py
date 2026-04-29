@@ -94,7 +94,7 @@ async def init_connection():
         try:
             db_pool = await asyncio.wait_for(
                 asyncpg.create_pool(dsn=NEON_URL),
-                timeout=5.0
+                timeout=60.0
             )
             logger.info("✅ [DB] Підключено до хмари NEON!")
             return
@@ -154,6 +154,7 @@ async def init_db():
         ("streak_days", "INTEGER DEFAULT 0"),
         ("interface_lang", "TEXT DEFAULT 'uk'"),
         ("target_lang",    "TEXT DEFAULT 'English'"),
+        ("last_premium_ai_use", "TEXT"), # <--- ДОДАНО ОСЬ ЦЕЙ РЯДОК
     ]
     for col, dtype in columns_users:
         await add_column_if_not_exists("users", col, dtype)
@@ -532,3 +533,23 @@ async def update_user_level(user_id, total_xp):
              "B1" if total_xp < 350 else "B2" if total_xp < 700 else "C1")
     await db_execute("UPDATE users SET level=$1 WHERE user_id=$2", level, user_id)
     return level
+
+
+async def can_use_premium_ai(user_id: int) -> bool: #Перевіряє, чи не використовував юзер преміум ШІ сьогодні.
+    row = await db_fetchrow("SELECT last_premium_ai_use FROM users WHERE user_id=$1", user_id)
+    if not row or not row['last_premium_ai_use']:
+        return True
+    try:
+        last_use = datetime.fromisoformat(row['last_premium_ai_use']).date()
+        return last_use < datetime.now().date()
+    except Exception:
+        return True
+
+async def update_premium_ai_usage(user_id: int): #Фіксує сьогоднішню дату використання преміум ШІ.
+    await db_execute(
+        "UPDATE users SET last_premium_ai_use=$1 WHERE user_id=$2",
+        datetime.now().isoformat(), user_id
+    )
+
+async def reset_premium_ai_usage(user_id: int): #Скидає ліміт (для адмін-команди).
+    await db_execute("UPDATE users SET last_premium_ai_use=NULL WHERE user_id=$1", user_id)
