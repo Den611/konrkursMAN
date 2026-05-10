@@ -9,3 +9,4 @@ aiosqlite
 psycopg2-binary
 flask
 httpx
+SQLAlchemy
