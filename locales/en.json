@@ -236,6 +236,9 @@
     "title": "Hardest words (lowest ease factor):",
     "repetitions": "repetitions",
     "footer": "These words get a shorter interval in SuperMemo-2"
+  },
+  "audio": {
+    "generating": "🎧 Generating audio voiceover...",
+    "voiceover": "🔊 Voiceover"
   }
 }
-

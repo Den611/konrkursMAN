@@ -182,7 +182,8 @@
     "streak_msg": "🔥 Seria: {streak} dni z rzędu!",
     "streak_achievement": "🏅 Osiągnięcie: {streak}-dniowa seria!",
     "summary_level": "📈 Poziom: {level}",
-    "summary_streak": "🔥 Seria: {streak} dni"  },
+    "summary_streak": "🔥 Seria: {streak} dni"
+  },
   "ai": {
     "enter_word": "🤖 Wpisz słowo do wyjaśnienia (lub /exit):",
     "choose_lang": "🌍 Język słowa?",
@@ -235,5 +236,9 @@
     "title": "Najtrudniejsze słowa (najniższy ease factor):",
     "repetitions": "powtórzeń",
     "footer": "Te słowa otrzymują krótszy interwał w SuperMemo-2"
+  },
+  "audio": {
+    "generating": "🎧 Generowanie nagrania głosowego...",
+    "voiceover": "🔊 Lektor"
   }
 }
