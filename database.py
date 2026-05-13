@@ -18,7 +18,7 @@ def set_db_mode(force_sqlite: bool):
     FORCE_SQLITE = force_sqlite
 
 
-# --- УНІВЕРСАЛЬНИЙ АДАПТЕР (PostgreSQL <-> SQLite) ---
+# АДАПТЕР (PostgreSQL <-> SQLite) 
 async def db_execute(query, *args):
     if FORCE_SQLITE:
         q = query.replace("SERIAL", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("BIGINT", "INTEGER")
@@ -66,7 +66,7 @@ async def db_fetch(query, *args):
             return await conn.fetch(query, *args)
 
 
-# --- ІНІЦІАЛІЗАЦІЯ ---
+# ІНІЦІАЛІЗАЦІЯ
 async def init_connection():
     global db_pool, sqlite_conn, FORCE_SQLITE
     from config import NEON_URL
@@ -79,7 +79,7 @@ async def init_connection():
 
     logger.info("🔍 [DB] Стукаємо на ДОМАШНІЙ СЕРВЕР...")
     try:
-        # Даємо домашньому серверу 3 секунди на відповідь
+        # Таймед для домашнього сервака
         db_pool = await asyncio.wait_for(
             asyncpg.create_pool(user=DB_USER, password=DB_PASSWORD, database=DB_NAME, host=SERVER_IP, port=DB_PORT),
             timeout=3.0
@@ -89,7 +89,7 @@ async def init_connection():
     except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
         logger.warning("⚠️ [DB] Домашній сервер мовчить.")
 
-    if NEON_URL and "тут_буде_твій_лінк" not in NEON_URL:
+    if NEON_URL and "лінк" not in NEON_URL:
         logger.info("☁️ [DB] Перемикання на хмару NEON...")
         try:
             db_pool = await asyncio.wait_for(
@@ -167,13 +167,13 @@ async def init_db():
     for col, dtype in columns_words:
         await add_column_if_not_exists("user_words", col, dtype)
 
-# --- ФУНКЦІЇ ДОСТУПУ ---
+# ФУНКЦІЇ ДОСТУПУ 
 async def add_user(user_id, username):
     try:
         await db_execute("INSERT INTO users (user_id, username, start_date, last_active, interface_lang) VALUES ($1, $2, $3, $4, 'uk')",
                          user_id, username, datetime.now().isoformat(), datetime.now().isoformat())
     except:
-        pass  # Ігноруємо якщо вже є
+        pass
 
 
 async def update_user_profile(user_id, style, hobby):
@@ -374,8 +374,7 @@ async def update_word_progress_sm2(user_id, word, quality: int):
     )
 
 
-async def get_weak_words(user_id, limit=10):
-    """Слова з найнижчим ease_factor — найважчі для юзера."""
+async def get_weak_words(user_id, limit=10):#Слова з найнижчим ease_factor 
     return await db_fetch(
         """SELECT word, translation, language, ease_factor, usage_count
            FROM user_words
@@ -387,7 +386,6 @@ async def get_weak_words(user_id, limit=10):
 
 
 async def get_word_stats(user_id):
-    """Загальна статистика слів для /stats."""
     total  = await db_fetchval("SELECT COUNT(*) FROM user_words WHERE user_id=$1", user_id)
     due    = await db_fetchval(
         "SELECT COUNT(*) FROM user_words WHERE user_id=$1 AND (next_review_date IS NULL OR next_review_date <= $2)",
@@ -405,7 +403,6 @@ async def get_word_stats(user_id):
 
 
 async def get_user_full_profile(user_id):
-    """Повний профіль для /stats."""
     return await db_fetchrow(
         "SELECT learning_style, hobbies, best_score, level, streak_days, last_active FROM users WHERE user_id=$1",
         user_id
@@ -413,7 +410,6 @@ async def get_user_full_profile(user_id):
 
 
 async def update_user_level(user_id, total_xp):
-    """Оновити рівень A1–C1 за кількістю XP."""
     if total_xp < 50:
         level = "A1"
     elif total_xp < 150:
