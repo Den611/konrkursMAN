@@ -97,7 +97,7 @@ NEON_URL=postgres://user:pass@host/dbname?sslmode=require
 **Запуск Telegram-бота:**
 Бот автоматично ініціалізує базу даних, завантажить локалізації з папки `locales/` та спробує підключитися до PostgreSQL[cite: 1].
 ```bash
-python bot.py
+python main.py
 ```
 
 **Очищення бази (за потреби):**

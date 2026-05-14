@@ -37,7 +37,7 @@ async def process_wod_lang(message: types.Message, state: FSMContext):
     diff      = "A1" if lvl <= 3 else "B1" if lvl <= 8 else "C1"
     native    = ai_lang_name(uid)
     prompt    = (f"Generate exactly ONE word in {lang_learn} for level {diff} "
-                 f"with {native} translation. Format strictly: Apple - Яблуко")
+                 f"with {native} translation. Format strictly: [Word in {lang_learn}] - [Translation in {native}]")
     result    = await ai_manager.generate_content_safe(prompt, uid=uid)
     w, t_word = None, None
     for line in result.split('\n'):
@@ -62,31 +62,25 @@ async def process_wod_lang(message: types.Message, state: FSMContext):
         await state.update_data(new_word=w, translation=t_word, lang=lang_learn,
                                 image_url=img, association=assoc, transcription=transc)
         
-        # 1. Формуємо базове повідомлення
         msg_text = ul(uid, "word_of_day.result",
                       word=html.escape(w), transcription=html.escape(transc or ""),
                       translation=html.escape(t_word))
         
-        # 2. Отримуємо перекладені заголовки з JSON
         lbl_assoc = ul(uid, "word_of_day.association_lbl")
         lbl_ex = ul(uid, "word_of_day.examples_lbl")
         
-        # Якщо в JSON ще немає цих ключів, ставимо запасний варіант (fallback)
         if lbl_assoc == "word_of_day.association_lbl": lbl_assoc = "Асоціація"
         if lbl_ex == "word_of_day.examples_lbl": lbl_ex = "Приклади"
 
-        # 3. Додаємо асоціацію (якщо є)
         if assoc:
             msg_text += f"\n\n💡 <b>{lbl_assoc}:</b> <i>{html.escape(assoc)}</i>"
             
-        # 4. Додаємо приклади (якщо є)
         examples = info.get("examples", [])
         if examples:
             msg_text += f"\n\n📝 <b>{lbl_ex}:</b>\n"
             for ex in examples:
                 msg_text += f"🔸 <i>{html.escape(ex)}</i>\n"
 
-        # Захист від ліміту Telegram для підпису до фото
         if len(msg_text) > 1024:
             msg_text = msg_text[:1020] + "..."
 
@@ -194,17 +188,14 @@ async def cmd_premium_tutor(message: types.Message):
         )
         return
 
-    # Виводимо перекладене повідомлення очікування
     msg = await message.answer(ul(uid, "ai.tutor_thinking"))
 
-    # 2. Формуємо крутий багатомовний промпт
     hobby = await db.get_user_hobby(uid) or "everyday life"
     try:
         lang_learn = await db.get_target_lang(uid)
     except:
         lang_learn = "English"
-        
-    # Визначаємо мову інтерфейсу користувача (щоб ШІ знав, якою мовою відповідати)
+
     native_lang = ai_lang_name(uid)
         
     prompt = f"""
@@ -215,10 +206,8 @@ async def cmd_premium_tutor(message: types.Message):
     Respond EXCLUSIVELY in {native_lang}.
     """
 
-    # 3. Викликаємо PRO-модель (або ту, яка зараз в ротації для преміуму)
     response = await ai_manager.generate_premium_content_safe(prompt, uid=uid)
 
-    # 4. Записуємо в БД, якщо відповідь успішна
     if "😅" not in response:
         await db.update_premium_ai_usage(uid)
 
@@ -227,7 +216,6 @@ async def cmd_premium_tutor(message: types.Message):
 
 @router.message(Command("reset_ai"))
 async def admin_reset_ai(message: types.Message):
-    # Команда тільки для тебе (можеш додати перевірку на свій ID)
     args = message.text.split()
     if len(args) != 2:
         await message.answer("❌ Формат: /reset_ai <user_id>")

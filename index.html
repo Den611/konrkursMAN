@@ -40,7 +40,6 @@
 
         .hint-text { font-size: 13px; opacity: 0.6; }
 
-        /* Поле вводу (+8 балів) */
         .input-area {
             display: flex;
             gap: 10px;
@@ -82,7 +81,6 @@
             content: ""; height: 1px; background: #555; flex-grow: 1; margin: 0 10px;
         }
 
-        /* Кнопки (+1 бал) */
         .options-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -188,7 +186,7 @@
     let timerInt;
     let correctWordsList = [];
 
-    // --- АЛГОРИТМ НЕЧІТКОГО ПОШУКУ (FUZZY MATCHING) ---
+    // АЛГОРИТМ НЕЧІТКОГО ПОШУКУ 
     function levenshteinDistance(a, b) {
         a = a.toLowerCase().trim();
         b = b.toLowerCase().trim();
@@ -223,7 +221,7 @@
         if (maxLen === 0) return 1.0;
         return 1.0 - (levenshteinDistance(a, b) / maxLen);
     }
-    // ---------------------------------------------------
+
 
     function loadWordsFromUrl() {
         try {
@@ -276,7 +274,6 @@
             attempts++;
         }
         
-        // Заглушки якщо мало слів
         const placeholders = ["Слово", "Тест", "Інше", "Питання"];
         let p = 0;
         while(opts.size < 4) opts.add(placeholders[p++] || "???");
@@ -294,7 +291,6 @@
         });
     }
 
-    // ОНОВЛЕНА ФУНКЦІЯ: Перевірка вводу через схожість
     function checkInput() {
         const val = document.getElementById('ansInput').value.trim();
         if (!val) return;
@@ -302,15 +298,15 @@
         const correct = currentWord.t;
         let sim = calculateSimilarity(val, correct);
 
-        // Динамічне нарахування балів залежно від точності
+
         if (sim === 1.0) {
-            success(8, true); // Ідеально (+8 балів)
+            success(8, true); // +8 балів
         } else if (sim >= 0.8) {
-            success(5, true); // Одна опечатка (+5 балів)
+            success(5, true); // +5 балів
         } else if (sim >= 0.6) {
-            success(2, true); // Кілька помилок, але близько (+2 бали)
+            success(2, true); // +2 бали
         } else {
-            failInput();      // Зовсім неправильно
+            failInput();      
         }
     }
 
@@ -346,7 +342,6 @@
         const el = document.createElement('div');
         el.className = 'points-float';
         el.innerText = `+${pts}`;
-        // Жовтий колір для тексту (складно), зелений для кнопок (легко)
         el.style.color = isHard ? '#ffa502' : '#2ed573'; 
         const card = document.querySelector('.card');
         const rect = card.getBoundingClientRect();

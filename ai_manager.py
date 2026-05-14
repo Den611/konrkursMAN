@@ -32,10 +32,10 @@ class RotationManager:
     def __init__(self, keys):
         self.keys = [k for k in keys if k.strip()]
         self.models = [
-            "gemini-2.5-flash-lite", # Твоя основна робоча конячка (працює ідеально!)
-            "gemma-3-27b-it",        # Додали -it, можливо тепер запрацює
-            "gemini-2.5-flash",      # Резерв на випадок вичерпання лімітів
-            "gemini-1.5-flash"       # Найнадійніший резерв (має 1500 запитів/день)
+            "gemini-2.5-flash-lite", 
+            "gemma-3-27b-it",    
+            "gemini-2.5-flash",
+            "gemini-1.5-flash"     
             "gemini-3.1-flash-lite"
         ]
         self.current_key_idx = 0
@@ -57,7 +57,7 @@ class RotationManager:
 rotation_manager = RotationManager(GEMINI_KEYS)
 
 
-# ДОДАНО параметр uid: int = 0
+
 async def generate_content_safe(prompt: str, uid: int = 0, model_name: str = "gemma:2b") -> str:
     if not FORCE_GEMINI:
         logger.info(f"⏳ [AI] Запит до Ollama ({model_name})...")
@@ -123,10 +123,8 @@ async def generate_content_safe(prompt: str, uid: int = 0, model_name: str = "ge
 
     return ul(uid, "errors.ai_busy") if uid else "😅 ШІ зараз обробляє багато запитів. Спробуй через хвилину!"
 
-
-# ДОДАНО параметр uid: int = 0
+#РЕПЕТИТОР (МАЙБУТНЄ)
 async def generate_premium_content_safe(prompt: str, uid: int = 0) -> str:
-    """Викликає найрозумнішу з доступних моделей для преміум-репетитора."""
     if not rotation_manager.keys:
         return ul(uid, "errors.ai_busy") if uid else "😅 ШІ зараз перевантажений! Спробуй пізніше."
 
@@ -134,7 +132,6 @@ async def generate_premium_content_safe(prompt: str, uid: int = 0) -> str:
     while attempts < max_attempts:
         api_key, _ = rotation_manager.get_current()
         
-        # Використовуємо Gemini 3 Flash (ліміт 20 запитів/день, ідеально для репетитора)
         gemini_url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                       f"gemini-3-flash:generateContent?key={api_key}")
         try:
@@ -196,7 +193,6 @@ async def get_image_url(query, use_random=False):
 
 async def get_full_word_info(word: str, translation: str, lang: str,
                              response_lang: str = "Ukrainian", uid: int = 0) -> dict:
-    # 1. Максимально жорсткий промпт без зайвих слів
     prompt = (
         f"Analyze the word '{word}' ({lang}, translation: '{translation}'). "
         f"Provide the explanation in {response_lang}. "
@@ -222,13 +218,11 @@ async def get_full_word_info(word: str, translation: str, lang: str,
     if "😅" in text or not text:
         return result
 
-    # 2. Покращений парсер: шукає ключові слова в будь-якому регістрі
     for line in text.splitlines():
         line = line.strip().replace("*", "").replace("`", "")
         if not line or ":" not in line:
             continue
             
-        # Розбиваємо рядок на ключ і значення
         key_part, value_part = line.split(":", 1)
         key = key_part.strip().upper()
         value = value_part.strip()
@@ -238,13 +232,10 @@ async def get_full_word_info(word: str, translation: str, lang: str,
         elif "ASSOCIATION" in key:
             result["association"] = value
         elif "EXAMPLE" in key:
-            # Ловимо EXAMPLE 1, EXAMPLE2, ПРИКЛАД 1 тощо, якщо ШІ знову перекладе
             result["examples"].append(value)
         elif "IMAGE" in key:
             result["image_query"] = value
 
-    # Якщо ШІ таки переклав ключі (наприклад, "АСОЦІАЦІЯ:"), спробуємо знайти їх за змістом
-    # Це фінальний захист, якщо основний цикл нічого не знайшов
     if result["association"] == translation:
         for line in text.splitlines():
             if "асоціація" in line.lower() or "skojarzenie" in line.lower() or "association" in line.lower():
@@ -254,7 +245,6 @@ async def get_full_word_info(word: str, translation: str, lang: str,
     return result
 
 
-# ДОДАНО параметр uid: int = 0
 async def get_ai_explanation_text(content: str, language_of_word: str,
                                   hobby: str = "everyday life",
                                   response_lang: str = "Ukrainian", uid: int = 0) -> str:
@@ -266,24 +256,18 @@ async def get_ai_explanation_text(content: str, language_of_word: str,
     prompt = (
         f"Explain the word '{content}'. {lang_hint} "
         f"The student is interested in: '{hobby}'. "
-        f"Write the ENTIRE explanation ONLY in {response_lang}. "
+        f"Write the ENTIRE text ONLY in {response_lang}, including ALL headings! "
         f"Use **word** for bold text. NO other markdown. "
         f"Structure:\n"
         f"1. **{content}** — [transcription] — translation\n"
-        f"2. Meaning: short definition\n"
-        f"3. Association: funny memorable association to remember this word\n"
-        f"4. Example: one sentence related to {hobby}"
+        f"2. [Translate 'Meaning' to {response_lang}]: short definition\n"
+        f"3. [Translate 'Association' to {response_lang}]: funny memorable association to remember this word\n"
+        f"4. [Translate 'Example' to {response_lang}]: one sentence related to {hobby}"
     )
-    # ПЕРЕДАЄМО uid ДАЛІ
+
     result = await generate_content_safe(prompt, uid=uid)
-
-    # Конвертуємо **bold** → <b>bold</b>
     result = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', result)
-
-    # Чистимо решту markdown
     result = result.replace("__", "").replace("`", "").replace("*", "")
-
-    # Безпечна заміна < > (крім наших <b> тегів)
     result = result.replace("<b>", "«B»").replace("</b>", "«/B»")
     result = result.replace("<", "").replace(">", "")
     result = result.replace("«B»", "<b>").replace("«/B»", "</b>")

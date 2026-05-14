@@ -49,7 +49,6 @@ async def practice_choose_lang(message: types.Message, state: FSMContext):
     await state.update_data(plist=target[:10], pidx=0)
     await state.set_state(PracticeWord.waiting_for_answer)
     
-    # Відправляємо першу картку
     await send_practice_flashcard(message, uid, target[0])
  
 async def send_practice_flashcard(message_obj: types.Message, uid: int, word_data: dict):

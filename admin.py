@@ -15,16 +15,13 @@ REFRESH_INTERVAL = 5000
 ACTIVE_THRESHOLD_MINUTES = 5
 
 
-# ==========================================
-# РОЗУМНИЙ МЕНЕДЖЕР БАЗИ ДАНИХ (Тільки PostgreSQL)
-# ==========================================
+# РОЗУМНИЙ МЕНЕДЖЕР БАЗИ ДАНИХ 
 class DBManager:
     def __init__(self):
         self.conn = None
         self.active_source = "Немає підключення"
 
     def connect(self):
-        # 1. Спочатку стукаємо до домашнього сервера
         try:
             self.conn = psycopg2.connect(
                 host=os.getenv("SERVER_IP", "127.0.0.1"),
@@ -40,7 +37,6 @@ class DBManager:
         except Exception as e:
             print(f"⚠️ Домашній сервер недоступний: {e}")
 
-        # 2. Якщо сервер лежить - йдемо в Neon
         neon_url = os.getenv("NEON_URL")
         if neon_url and "тут_буде_твій_лінк" not in neon_url:
             # 🛠 ВИПРАВЛЕННЯ: Робимо так, щоб psycopg2 розумів посилання
@@ -96,9 +92,7 @@ def fix_db_safe():
         pass
 
 
-# ==========================================
-# ПАЛІТРИ ДИЗАЙНУ
-# ==========================================
+# ПАЛІТРА
 THEMES = {
     "dark": {
         "name": "🌙 Темна тема",
@@ -170,7 +164,6 @@ class AdminApp(tk.Tk):
         self.main_container.pack(fill=tk.BOTH, expand=True)
         self.theme_widgets["bg"].append(self.main_container)
 
-        # Бокове меню
         self.sidebar = tk.Frame(self.main_container, width=220)
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
         self.sidebar.pack_propagate(False)
@@ -182,7 +175,6 @@ class AdminApp(tk.Tk):
         lbl_logo.pack(pady=25, padx=15, anchor="w")
         self.theme_widgets["labels"].append(lbl_logo)
 
-        # Статус підключення
         lbl_status = tk.Label(
             self.sidebar,
             text=f"Джерело:\n{db.active_source}",
@@ -199,7 +191,6 @@ class AdminApp(tk.Tk):
             self.sidebar, "✉️ Відгуки та Розсилка", lambda: self.switch_tab(1)
         )
 
-        # Кнопка Бекапу
         self.btn_backup = self.create_nav_button(
             self.sidebar, "💾 Зробити Бекап", self.create_local_backup
         )
@@ -215,7 +206,6 @@ class AdminApp(tk.Tk):
         self.btn_theme.pack(side=tk.BOTTOM, fill=tk.X, pady=15, padx=15, ipady=8)
         self.theme_widgets["btn_accent"].append(self.btn_theme)
 
-        # Контент
         self.content_area = tk.Frame(self.main_container)
         self.content_area.pack(
             side=tk.LEFT, fill=tk.BOTH, expand=True, padx=15, pady=15
@@ -286,7 +276,7 @@ class AdminApp(tk.Tk):
         )
         self.btn_backup.configure(
             bg=inact_bg, fg=inact_fg
-        )  # Бекап ніколи не "активний" як вкладка
+        ) 
 
     def toggle_theme(self):
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
@@ -484,7 +474,7 @@ class AdminApp(tk.Tk):
 
         frame_tools = ttk.Frame(card_words, style="Card.TFrame")
         frame_tools.pack(fill=tk.X, padx=5, pady=10)
-        # Delite user
+
         self.create_action_button(
             frame_tools, "🗑 Видалити користувача", self.delete_user
         ).pack(side=tk.LEFT, padx=5)
@@ -564,7 +554,7 @@ class AdminApp(tk.Tk):
             card_fb, "✅ Прочитано", self.mark_feedback_read
         ).pack(side=tk.RIGHT, padx=5, pady=5)
 
-    # ================= ЛОГІКА РОБОТИ З POSTGRESQL =================
+    # ЛОГІКА РОБОТИ З POSTGRESQL
     def send_broadcast(self):
         msg = self.txt_broadcast.get("1.0", tk.END).strip()
         recipient = self.recipient_var.get()
@@ -903,7 +893,7 @@ class AdminApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Помилка", str(e))
 
-    # --- СТВОРЕННЯ ЛОКАЛЬНОГО БЕКАПУ З POSTGRESQL У SQLITE ---
+    # СТВОРЕННЯ ЛОКАЛЬНОГО БЕКАПУ 
     def create_local_backup(self):
         response = messagebox.askyesno(
             "Бекап Бази Даних",
@@ -913,11 +903,10 @@ class AdminApp(tk.Tk):
             return
 
         try:
-            # 1. Підключаємось або створюємо локальну SQLite
+
             local_db = sqlite3.connect("backup_words.db")
             cur = local_db.cursor()
 
-            # 2. Створюємо структуру
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, start_date TEXT, last_active TEXT, best_score INTEGER DEFAULT 0, level TEXT, hobbies TEXT, learning_style TEXT, streak_days INTEGER DEFAULT 0)"
             )
@@ -928,12 +917,10 @@ class AdminApp(tk.Tk):
                 "CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, message TEXT, date TEXT, status TEXT)"
             )
 
-            # Очищаємо старі дані в локальному бекапі
             cur.execute("DELETE FROM users")
             cur.execute("DELETE FROM user_words")
             cur.execute("DELETE FROM feedback")
 
-            # 3. Перетягуємо дані з PostgreSQL (users)
             users = db.fetchall(
                 "SELECT user_id, username, start_date, last_active, best_score, level, hobbies, learning_style, streak_days FROM users"
             )
@@ -941,7 +928,6 @@ class AdminApp(tk.Tk):
                 "INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", users
             )
 
-            # Перетягуємо user_words
             words = db.fetchall(
                 "SELECT id, user_id, word, translation, language, usage_count, image_url, association, transcription, next_review_date, interval, ease_factor FROM user_words"
             )
@@ -971,13 +957,11 @@ class AdminApp(tk.Tk):
                 "Увага", "Оберіть користувача зліва для видалення!"
             )
 
-        # Отримуємо юзернейм для красивого повідомлення
         data = db.fetchone(
             "SELECT username FROM users WHERE user_id=%s", (self.selected_user_id,)
         )
         username = f"@{data[0]}" if data and data[0] else "Без імені"
 
-        # Вікно підтвердження
         confirm = messagebox.askyesno(
             "⚠️ Підтвердження видалення",
             f"Ви впевнені, що хочете ПОВНІСТЮ видалити користувача {username} (ID: {self.selected_user_id})?\n\n"
@@ -986,15 +970,12 @@ class AdminApp(tk.Tk):
 
         if confirm:
             try:
-                # 1. Видаляємо всі слова користувача
                 db.execute(
                     "DELETE FROM user_words WHERE user_id=%s", (self.selected_user_id,)
                 )
-                # 2. Видаляємо всі відгуки користувача
                 db.execute(
                     "DELETE FROM feedback WHERE user_id=%s", (self.selected_user_id,)
                 )
-                # 3. Видаляємо самого користувача
                 db.execute(
                     "DELETE FROM users WHERE user_id=%s", (self.selected_user_id,)
                 )
@@ -1002,7 +983,7 @@ class AdminApp(tk.Tk):
                     "Готово", f"Користувача {username} успішно видалено."
                 )
 
-                # Очищаємо інтерфейс від старих даних
+
                 self.selected_user_id = None
                 self.lbl_selected.config(
                     text="Оберіть користувача зліва 👈", fg=self.colors["text"]
@@ -1013,7 +994,6 @@ class AdminApp(tk.Tk):
                 for r in self.stats_tree.get_children():
                     self.stats_tree.delete(r)
 
-                # Оновлюємо таблиці (це прибере видаленого юзера зі списку)
                 self.update_users_table()
 
             except Exception as e:

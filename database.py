@@ -7,7 +7,6 @@ from config import SERVER_IP, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT
 
 logger = logging.getLogger(__name__)
 
-# Глобальні змінні для баз даних
 db_pool = None
 sqlite_conn = None
 FORCE_SQLITE = False
@@ -18,7 +17,7 @@ def set_db_mode(force_sqlite: bool):
     FORCE_SQLITE = force_sqlite
 
 
-# АДАПТЕР (PostgreSQL <-> SQLite) 
+# АДАПТЕР
 async def db_execute(query, *args):
     if FORCE_SQLITE:
         q = query.replace("SERIAL", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("BIGINT", "INTEGER")
@@ -129,7 +128,6 @@ async def init_db():
         )
     ''')
 
-    # Додавання індексу для швидкого пошуку
     await db_execute('''
         CREATE INDEX IF NOT EXISTS idx_user_words_user_id 
         ON user_words (user_id)
@@ -154,7 +152,7 @@ async def init_db():
         ("streak_days", "INTEGER DEFAULT 0"),
         ("interface_lang", "TEXT DEFAULT 'uk'"),
         ("target_lang",    "TEXT DEFAULT 'English'"),
-        ("last_premium_ai_use", "TEXT"), # <--- ДОДАНО ОСЬ ЦЕЙ РЯДОК
+        ("last_premium_ai_use", "TEXT"), 
     ]
     for col, dtype in columns_users:
         await add_column_if_not_exists("users", col, dtype)
@@ -204,7 +202,6 @@ async def update_user_lang(user_id, lang):
     await db_execute("UPDATE users SET interface_lang=$1 WHERE user_id=$2", lang, user_id)
 
 async def update_user_level(user_id, xp):
-    # Допоміжна функція для оновлення рівня, якщо потрібна буде
     pass
 
 async def add_word_to_db(user_id, word, translation, language, image_url=None, association=None, transcription=None):
@@ -309,14 +306,11 @@ async def update_streak(user_id):
         last_date = None
 
     if last_date == today:
-        # Вже заходив сьогодні — нічого не міняємо
         return streak, False
 
     if last_date == today - timedelta(days=1):
-        # Вчора заходив — продовжуємо серію
         streak += 1
     else:
-        # Пропустив хоча б один день — скидаємо
         streak = 1
 
     await db_execute(
@@ -354,13 +348,11 @@ async def update_word_progress_sm2(user_id, word, quality: int):
         else:
             interval = round(interval * ease_factor)
 
-        # Оновлення ease_factor (не нижче 1.3)
         ease_factor = max(1.3, round(
             ease_factor + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02), 2
         ))
         usage_add = 1
     else:
-        # Неправильна — скинути інтервал
         interval    = 1
         ease_factor = max(1.3, round(ease_factor - 0.2, 2))
         usage_add   = 0
@@ -374,7 +366,7 @@ async def update_word_progress_sm2(user_id, word, quality: int):
     )
 
 
-async def get_weak_words(user_id, limit=10):#Слова з найнижчим ease_factor 
+async def get_weak_words(user_id, limit=10):
     return await db_fetch(
         """SELECT word, translation, language, ease_factor, usage_count
            FROM user_words

@@ -54,7 +54,6 @@ async def process_wod_lang(message: types.Message, state: FSMContext):
             break
             
     if w and t_word:
-        # Отримуємо повну інфо (додано uid=uid для багатомовності)
         info   = await ai_manager.get_full_word_info(w, t_word, lang_learn, response_lang=native, uid=uid)
         transc = info["transcription"]
         assoc  = info["association"]
@@ -71,31 +70,25 @@ async def process_wod_lang(message: types.Message, state: FSMContext):
         await state.update_data(new_word=w, translation=t_word, lang=lang_learn,
                                 image_url=img, association=assoc, transcription=transc)
                                 
-        # 1. Формуємо базове повідомлення
         msg_text = ul(uid, "word_of_day.result",
                       word=html.escape(w), transcription=html.escape(transc or ""),
                       translation=html.escape(t_word))
                       
-        # 2. Отримуємо перекладені заголовки з JSON
         lbl_assoc = ul(uid, "word_of_day.association_lbl")
         lbl_ex = ul(uid, "word_of_day.examples_lbl")
         
-        # Запасний варіант
         if lbl_assoc == "word_of_day.association_lbl": lbl_assoc = "Асоціація"
         if lbl_ex == "word_of_day.examples_lbl": lbl_ex = "Приклади"
 
-        # 3 асоціація
         if assoc:
             msg_text += f"\n\n💡 <b>{lbl_assoc}:</b> <i>{html.escape(assoc)}</i>"
             
-        # 4 приклади
         examples = info.get("examples", [])
         if examples:
             msg_text += f"\n\n📝 <b>{lbl_ex}:</b>\n"
             for ex in examples:
                 msg_text += f"🔸 <i>{html.escape(ex)}</i>\n"
 
-        # Захист від ліміту Telegram для підпису до фото
         if len(msg_text) > 1024:
             msg_text = msg_text[:1020] + "..."
 

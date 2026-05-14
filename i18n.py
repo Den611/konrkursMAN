@@ -4,7 +4,7 @@ from functools import lru_cache
 
 LOCALES_DIR = os.path.join(os.path.dirname(__file__), "locales")
 
-# Доступні мови інтерфейсу: код → (назва, прапор)
+# Доступні мови інтерфейсу
 SUPPORTED_UI_LANGS: dict[str, tuple[str, str]] = {
     "uk": ("Українська", "🇺🇦"),
     "pl": ("Polski",     "🇵🇱"),
@@ -13,11 +13,11 @@ SUPPORTED_UI_LANGS: dict[str, tuple[str, str]] = {
 
 DEFAULT_LANG = "uk"
 
-# Кеш user_id → код мови (в пам'яті; скидається при рестарті)
+# Кеш user_id
 _user_lang_cache: dict[int, str] = {}
 
 
-# ---------- Завантаження JSON (кешується через lru_cache) ----------
+#  Завантаження JSON 
 
 @lru_cache(maxsize=len(SUPPORTED_UI_LANGS) + 1)
 def _load_locale(lang: str) -> dict:
@@ -30,14 +30,9 @@ def _load_locale(lang: str) -> dict:
         return json.load(f)
 
 
-# ---------- Основна функція перекладу ----------
-
-# ---------- Основна функція перекладу ----------
+# Основна функція перекладу
 
 def t(locale: str, key: str, **kwargs) -> str:
-    """
-    Повернути локалізований рядок за точковим ключем.
-    """
     data = _load_locale(locale)
     parts = key.split(".")
     val: object = data
@@ -50,16 +45,14 @@ def t(locale: str, key: str, **kwargs) -> str:
             break
 
     if not isinstance(val, str):
-        # Якщо ключ не знайдено — спробуємо дефолтну мову
         if locale != DEFAULT_LANG:
             return t(DEFAULT_LANG, key, **kwargs)
-        return key  # крайній fallback: повернути сам ключ
-
+        return key 
     return val.format(**kwargs) if kwargs else val
 
 
 def get_list(lang: str, key: str) -> list:
-    """Повернути список за ключем (напр. style_test, hobby_categories)."""
+    """Повернути список за ключем"""
     data = _load_locale(lang)
     parts = key.split(".")
     val: object = data
@@ -69,7 +62,7 @@ def get_list(lang: str, key: str) -> list:
 
 
 def get_dict(lang: str, key: str) -> dict:
-    """Повернути словник за ключем."""
+    """Повернути словник за ключем"""
     data = _load_locale(lang)
     parts = key.split(".")
     val: object = data
@@ -78,8 +71,7 @@ def get_dict(lang: str, key: str) -> dict:
     return val if isinstance(val, dict) else {}
 
 
-# ---------- Кеш мов користувачів ----------
-
+# Кеш мов 
 def set_user_lang(user_id: int, lang: str) -> None:
     """Зберегти мову користувача в пам'яті."""
     if lang in SUPPORTED_UI_LANGS:
@@ -96,20 +88,16 @@ def invalidate_user(user_id: int) -> None:
     _user_lang_cache.pop(user_id, None)
 
 
-# ---------- Допоміжні утиліти ----------
 
 def get_style_display(lang: str, style_raw: str) -> str:
     """
     Повернути локалізовану назву стилю навчання.
-    Підтримує як нові внутрішні ключі ('visual'), так і старі ('Візуал').
     """
-    # Мапа зворотної сумісності зі старими українськими назвами
     legacy_map = {
         "Візуал":  "visual",
         "Аудіал":  "audial",
         "Логік":   "logic",
         "Практик": "practice",
-        # теж для інших мов на випадок старих записів
         "Wzrokowiec": "visual",
         "Słuchowiec": "audial",
         "Logik":      "logic",
@@ -121,18 +109,15 @@ def get_style_display(lang: str, style_raw: str) -> str:
     }
     internal_key = legacy_map.get(style_raw, style_raw)
     result = t(lang, f"style.{internal_key}.name")
-    # якщо ключ не знайдено — повернути оригінал
     return result if result != f"style.{internal_key}.name" else style_raw
 
 
-# Внутрішній порядок стилів (відповідає порядку опцій у style_test)
 STYLE_ORDER = ["visual", "audial", "logic", "practice"]
 
 
 def score_answer(text: str, options: list[str]) -> str | None:
     """
     Визначити внутрішній ключ стилю за текстом відповіді.
-    options — список рядків з locale['style_test'][q_idx]['options']
     """
     for i, opt in enumerate(options):
         if text.strip() == opt.strip():

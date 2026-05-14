@@ -152,12 +152,12 @@ async def reg_hobby_category(message: types.Message, state: FSMContext):
     selected = data.get("selected_hobbies", [])
     custom_list = data.get(
         "custom_hobbies_list", []
-    )  # Створюємо окремий список для написаних вручну
+    )  
     text = message.text.strip()
     done_btn = i18n.t(lang, "hobby.done_btn")
 
     if text == done_btn:
-        if not selected and not custom_list:  # Перевіряємо обидва списки
+        if not selected and not custom_list: 
             await message.answer(
                 i18n.t(lang, "hobby.at_least_one"),
                 reply_markup=_hobby_keyboard(lang, selected),
@@ -171,7 +171,6 @@ async def reg_hobby_category(message: types.Message, state: FSMContext):
             )
             await state.set_state(Registration.hobby_custom)
 
-            # Збираємо те, що вже вибрано/написано для підказки
             hobby_so_far = _build_keyword_str(lang, sel_no_other)
             if custom_list:
                 custom_joined = ", ".join(custom_list)
@@ -198,20 +197,17 @@ async def reg_hobby_category(message: types.Message, state: FSMContext):
 
     cat = _find_cat_by_label(lang, text)
     if cat:
-        # 1. Якщо це клік по стандартній кнопці
         if cat["id"] in selected:
             selected.remove(cat["id"])
         else:
             selected.append(cat["id"])
     else:
-        # 2. Якщо ввели текст вручну з клавіатури
         raw_hobbies = text.split(",")
         for hobby in raw_hobbies:
             cleaned = hobby.strip().capitalize()
             if len(cleaned) >= 2 and cleaned not in custom_list:
                 custom_list.append(cleaned)
 
-    # Зберігаємо оновлені дані в стан (FSM)
     await state.update_data(selected_hobbies=selected, custom_hobbies_list=custom_list)
 
     count = len(selected) + len(custom_list)
@@ -222,7 +218,7 @@ async def reg_hobby_category(message: types.Message, state: FSMContext):
         names = [c["label"].split(" ", 1)[1] for c in cats_data if c["id"] in selected]
         names.extend(
             custom_list
-        )  # Додаємо власні слова у повідомлення "Вибрано (X): ..."
+        )  
         hint = i18n.t(lang, "hobby.selected_hint", count=count, names=", ".join(names))
 
     await message.answer(

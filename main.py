@@ -8,7 +8,7 @@ import database as db
 from middlewares import ThrottlingMiddleware, LangMiddleware, FSMCommandInterceptorMiddleware
 from handlers import general, registration, stats, ai_helper, practice, words
 
-# ── Логування ──────────────────────────────────────────────────────────────
+# Логування 
 class BotFormatter(logging.Formatter):
     SEP  = "═" * 52
     FMT  = "%(asctime)s  %(levelname)-8s  %(message)s"
@@ -39,12 +39,11 @@ _handler.setFormatter(BotFormatter(
 logging.root.setLevel(logging.INFO)
 logging.root.handlers = [_handler]
 
-# Приглушити зайвий шум від aiogram/asyncio
 for _noisy in ("aiogram", "asyncio", "aiohttp"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
-# ───────────────────────────────────────────────────────────────────────────
+
 
 bot = Bot(token=BOT_TOKEN)
 dp  = Dispatcher()
